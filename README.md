@@ -28,7 +28,7 @@ A full-stack attendance management application built using the MERN stack (Mongo
 
 ### 📍 PIN Geo-Fenced Self Check-In
 - Teachers can initiate check-in sessions generating a temporary 6-digit PIN and capturing GPS coordinates.
-- Students share their location coordinates (utilizing the HTML5 Geolocation API) to verify presence within a **50-meter radius** (Haversine formula validation).
+- Students share their location coordinates (utilizing the HTML5 Geolocation API) to verify presence within a **200-meter radius** (Haversine formula validation).
 
 ---
 

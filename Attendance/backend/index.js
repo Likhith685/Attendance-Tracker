@@ -1036,9 +1036,9 @@ app.post("/student/check-in", async (req, res) => {
                 }
                 
                 const distance = getDistanceInMeters(room.checkInLatitude, room.checkInLongitude, Number(latitude), Number(longitude));
-                if (distance > 50) {
+                if (distance > 200) {
                     return res.status(400).json({ 
-                        message: `Location verification failed: You are too far from the classroom. (Distance: ${Math.round(distance)} meters. Max allowed is 50 meters)` 
+                        message: `Location verification failed: You are too far from the classroom. (Distance: ${Math.round(distance)} meters. Max allowed is 200 meters)` 
                     });
                 }
             }

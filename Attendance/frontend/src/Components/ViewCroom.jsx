@@ -317,7 +317,7 @@ export default function ViewCroom() {
                       />
                       Require GPS Location Verification
                     </label>
-                    <p style={styles.checkboxSubtext}>Students must be within 50 meters of your current location to check in successfully.</p>
+                    <p style={styles.checkboxSubtext}>Students must be within 200 meters of your current location to check in successfully.</p>
                   </div>
 
                   {requireLocation && (
