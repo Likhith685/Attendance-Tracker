@@ -6,6 +6,8 @@ import Landing from './Components/Landing';
 import Navbar from './Components/Navbar';
 import ViewCroom from './Components/ViewCroom';
 import MarkAtt from './Components/MarkAtt';
+import StudentDashboard from './Components/StudentDashboard';
+import StudentCheckIn from './Components/StudentCheckIn';
 import 'react-toastify/dist/ReactToastify.css';
 
 function App() {
@@ -39,6 +41,24 @@ function App() {
           <>
             <Navbar />
             <MarkAtt />
+          </>
+        }
+      />
+      <Route
+        path="/student-dashboard"
+        element={
+          <>
+            <Navbar />
+            <StudentDashboard />
+          </>
+        }
+      />
+      <Route
+        path="/student-checkin/:roomid"
+        element={
+          <>
+            <Navbar />
+            <StudentCheckIn />
           </>
         }
       />

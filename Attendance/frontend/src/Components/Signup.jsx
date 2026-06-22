@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
+import { GoogleLogin } from '@react-oauth/google';
 
-export default function Signup({ trigger, setTrigger, onSuccess }) {
+export default function Signup({ trigger, setTrigger, onSuccess, onLoginLinkClick }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -13,12 +14,115 @@ export default function Signup({ trigger, setTrigger, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [hoveredButton, setHoveredButton] = useState(null);
 
+  // RBAC Role / Roll States
+  const [role, setRole] = useState("Teacher");
+  const [roll, setRoll] = useState("");
+
+  // States for new Google login/register role assignment
+  const [needRoleSelection, setNeedRoleSelection] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('Teacher');
+  const [selectedRoll, setSelectedRoll] = useState('');
+  const [googleToken, setGoogleToken] = useState('');
+
   if (!trigger) return null;
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    const token = credentialResponse.credential;
+    setLoading(true);
+    try {
+      // Check if user already exists
+      const res = await axios.post('http://localhost:5000/login-google', { token });
+      if (res.status === 200) {
+        localStorage.setItem('token', res.data.token);
+        localStorage.setItem('role', res.data.role || 'Teacher');
+        if (res.data.roll) {
+          localStorage.setItem('roll', res.data.roll);
+        } else {
+          localStorage.removeItem('roll');
+        }
+        toast.success('Login successful!', { 
+          position: 'top-right',
+          theme: 'dark',
+        });
+        setTrigger(false);
+        if (onSuccess) onSuccess(res.data.role);
+      }
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setGoogleToken(token);
+        setNeedRoleSelection(true);
+      } else {
+        toast.error(err.response?.data?.message || 'Google Sign-in failed', { 
+          position: 'top-right',
+          theme: 'dark',
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleRegister = async (e) => {
+    e.preventDefault();
+    if (selectedRole === 'Student' && (!selectedRoll || isNaN(Number(selectedRoll)))) {
+      toast.error('Please enter a valid roll number first', {
+        position: 'top-right',
+        theme: 'dark',
+      });
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await axios.post('http://localhost:5000/register-google', {
+        token: googleToken,
+        role: selectedRole,
+        roll: selectedRole === 'Student' ? Number(selectedRoll) : undefined
+      });
+      if (res.status === 201) {
+        localStorage.setItem('token', res.data.token);
+        localStorage.setItem('role', res.data.role || 'Teacher');
+        if (res.data.roll) {
+          localStorage.setItem('roll', res.data.roll);
+        } else {
+          localStorage.removeItem('roll');
+        }
+        toast.success('Registration and Login successful!', {
+          position: 'top-right',
+          theme: 'dark',
+        });
+        setNeedRoleSelection(false);
+        setTrigger(false);
+        if (onSuccess) onSuccess(res.data.role);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Registration failed', {
+        position: 'top-right',
+        theme: 'dark',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleFailure = () => {
+    toast.error("Google Sign-Up was unsuccessful. Try again.", {
+      position: 'top-right',
+      theme: 'dark',
+    });
+  };
 
   const handleSignup = async (e) => {
     e.preventDefault();
     if (password.length < 8) {
       toast.error("Password must be at least 8 characters", { 
+        position: 'top-right',
+        theme: 'dark',
+      });
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error("Please enter a valid email address", { 
         position: 'top-right',
         theme: 'dark',
       });
@@ -31,15 +135,36 @@ export default function Signup({ trigger, setTrigger, onSuccess }) {
       });
       return;
     }
+    if (role === "Student" && (!roll || isNaN(Number(roll)))) {
+      toast.error("Valid roll number is required for students", { 
+        position: 'top-right',
+        theme: 'dark',
+      });
+      return;
+    }
+
     setLoading(true);
     try {
-      await axios.post("http://localhost:5000/register", { name, email, password });
-      toast.success("Signed up successfully!", { 
+      const res = await axios.post("http://localhost:5000/register", { 
+        name, 
+        email, 
+        password,
+        role,
+        roll: role === "Student" ? Number(roll) : undefined
+      });
+      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('role', res.data.role || 'Teacher');
+      if (res.data.roll) {
+        localStorage.setItem('roll', res.data.roll);
+      } else {
+        localStorage.removeItem('roll');
+      }
+      toast.success("Signed up and logged in successfully!", { 
         position: 'top-right',
         theme: 'dark',
       });
       setTrigger(false);
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess(res.data.role);
     } catch (err) {
       toast.error(err.response?.data?.message || "Signup failed", { 
         position: 'top-right',
@@ -73,7 +198,7 @@ export default function Signup({ trigger, setTrigger, onSuccess }) {
 
         {/* Logo */}
         <div style={styles.logoContainer}>
-          <svg width="60" height="60" viewBox="0 0 60 60">
+          <svg width="40" height="40" viewBox="0 0 60 60">
             <defs>
               <linearGradient id="signupGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" style={{ stopColor: "#10b981", stopOpacity: 1 }} />
@@ -89,212 +214,374 @@ export default function Signup({ trigger, setTrigger, onSuccess }) {
         </div>
 
         <h2 style={styles.title}>
-          {loading ? (
-            <>
-              <span style={styles.loadingDot}>.</span>
-              <span style={styles.loadingDot}>.</span>
-              <span style={styles.loadingDot}>.</span>
-              Creating Account
-              <span style={styles.loadingDot}>.</span>
-              <span style={styles.loadingDot}>.</span>
-              <span style={styles.loadingDot}>.</span>
-            </>
-          ) : (
-            'Create Account'
-          )}
-        </h2>
-        <p style={styles.subtitle}>Join us and start managing attendance</p>
-
-        <form onSubmit={handleSignup} style={styles.form}>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>
-              <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
-                <path
-                  fill="currentColor"
-                  d="M8 0a4 4 0 100 8 4 4 0 000-8zM2 14c0-3.31 2.69-6 6-6s6 2.69 6 6H2z"
-                />
-              </svg>
-              Full Name
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={styles.input}
-              placeholder="Enter your name"
-              disabled={loading}
-            />
-          </div>
-
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>
-              <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
-                <path
-                  fill="currentColor"
-                  d="M0 3a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H2a2 2 0 01-2-2V3zm2 0v.5l6 3.5 6-3.5V3H2zm12 2.5l-6 3.5-6-3.5V13h12V5.5z"
-                />
-              </svg>
-              Email Address
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={styles.input}
-              placeholder="Enter your email"
-              disabled={loading}
-            />
-          </div>
-
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>
-              <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
-                <path
-                  fill="currentColor"
-                  d="M8 0a3 3 0 00-3 3v2H3a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1h-2V3a3 3 0 00-3-3zm1 3v2H7V3a1 1 0 112 0z"
-                />
-              </svg>
-              Password
-            </label>
-            <div style={styles.passwordWrapper}>
-              <input
-                type={showPassword ? "text" : "password"}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={styles.input}
-                placeholder="At least 8 characters"
-                disabled={loading}
-              />
-              <button
-                type="button"
-                style={styles.eyeIcon}
-                onClick={() => setShowPassword(!showPassword)}
-                tabIndex="-1"
-              >
-                {showPassword ? (
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path
-                      d="M3.26 11.602C3.942 8.327 6.793 6 10 6c3.206 0 6.057 2.327 6.74 5.602a.5.5 0 00.98-.204C16.943 7.673 13.711 5 10 5c-3.711 0-6.943 2.673-7.72 6.398a.5.5 0 00.98.204zM10 9a2 2 0 100 4 2 2 0 000-4z"
-                      fill="currentColor"
-                    />
-                    <path
-                      d="M2 2l16 16"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path
-                      d="M10 6C6.793 6 3.942 8.327 3.26 11.602a.5.5 0 01-.98-.204C3.057 7.673 6.289 5 10 5c3.711 0 6.943 2.673 7.72 6.398a.5.5 0 01-.98.204C16.057 8.327 13.206 6 10 6z"
-                      fill="currentColor"
-                    />
-                    <path
-                      d="M10 9a2 2 0 100 4 2 2 0 000-4z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>
-              <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
-                <path
-                  fill="currentColor"
-                  d="M13 7h-1V5a4 4 0 00-8 0v2H3a1 1 0 00-1 1v6a1 1 0 001 1h10a1 1 0 001-1V8a1 1 0 00-1-1zM6 5a2 2 0 114 0v2H6V5z"
-                />
-              </svg>
-              Confirm Password
-            </label>
-            <div style={styles.passwordWrapper}>
-              <input
-                type={showConf ? "text" : "password"}
-                required
-                value={confPassword}
-                onChange={(e) => setConfPassword(e.target.value)}
-                style={styles.input}
-                placeholder="Re-enter password"
-                disabled={loading}
-              />
-              <button
-                type="button"
-                style={styles.eyeIcon}
-                onClick={() => setShowConf(!showConf)}
-                tabIndex="-1"
-              >
-                {showConf ? (
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path
-                      d="M3.26 11.602C3.942 8.327 6.793 6 10 6c3.206 0 6.057 2.327 6.74 5.602a.5.5 0 00.98-.204C16.943 7.673 13.711 5 10 5c-3.711 0-6.943 2.673-7.72 6.398a.5.5 0 00.98.204zM10 9a2 2 0 100 4 2 2 0 000-4z"
-                      fill="currentColor"
-                    />
-                    <path
-                      d="M2 2l16 16"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path
-                      d="M10 6C6.793 6 3.942 8.327 3.26 11.602a.5.5 0 01-.98-.204C3.057 7.673 6.289 5 10 5c3.711 0 6.943 2.673 7.72 6.398a.5.5 0 01-.98.204C16.057 8.327 13.206 6 10 6z"
-                      fill="currentColor"
-                    />
-                    <path
-                      d="M10 9a2 2 0 100 4 2 2 0 000-4z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            style={{
-              ...styles.submitBtn,
-              ...(hoveredButton === 'submit' ? styles.submitBtnHover : {}),
-              ...(loading ? styles.submitBtnLoading : {}),
-            }}
-            onMouseEnter={() => setHoveredButton('submit')}
-            onMouseLeave={() => setHoveredButton(null)}
-            disabled={loading}
-          >
-            {loading ? (
+          {needRoleSelection ? 'Complete Signup' : (
+            loading ? (
               <>
-                <div style={styles.spinner}></div>
-                <span>Creating Account...</span>
+                <span style={styles.loadingDot}>.</span>
+                <span style={styles.loadingDot}>.</span>
+                <span style={styles.loadingDot}>.</span>
+                Creating Account
+                <span style={styles.loadingDot}>.</span>
+                <span style={styles.loadingDot}>.</span>
+                <span style={styles.loadingDot}>.</span>
               </>
             ) : (
-              <>
-                <span>Sign Up</span>
-                <svg width="16" height="16" viewBox="0 0 16 16" style={styles.btnIcon}>
+              'Create Account'
+            )
+          )}
+        </h2>
+        <p style={styles.subtitle}>
+          {needRoleSelection ? 'Please select your role and details to continue' : 'Join us and start managing attendance'}
+        </p>
+
+        {needRoleSelection ? (
+          <form onSubmit={handleGoogleRegister} style={styles.form}>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>
+                <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
                   <path
                     fill="currentColor"
-                    d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z"
+                    d="M8 8a3 3 0 100-6 3 3 0 000 6zm2-3a2 2 0 11-4 0 2 2 0 014 0zm4 8c0-1.66-3.58-3-8-3s-8 1.34-8 3v1h16v-1z"
                   />
                 </svg>
-              </>
+                Select Role
+              </label>
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                style={styles.select}
+                disabled={loading}
+              >
+                <option value="Teacher">Teacher</option>
+                <option value="Student">Student</option>
+              </select>
+            </div>
+
+            {selectedRole === "Student" && (
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
+                    <path
+                      fill="currentColor"
+                      d="M2 2a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V2zm3 1a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1z"
+                    />
+                  </svg>
+                  Roll Number
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={selectedRoll}
+                  onChange={(e) => setSelectedRoll(e.target.value)}
+                  style={styles.input}
+                  placeholder="Enter your roll number"
+                  disabled={loading}
+                />
+              </div>
             )}
-          </button>
-        </form>
 
-        <div style={styles.divider}>
-          <span style={styles.dividerText}>or</span>
-        </div>
+            <button
+              type="submit"
+              style={{
+                ...styles.submitBtn,
+                ...(hoveredButton === 'submit' ? styles.submitBtnHover : {}),
+                ...(loading ? styles.submitBtnLoading : {}),
+              }}
+              onMouseEnter={() => setHoveredButton('submit')}
+              onMouseLeave={() => setHoveredButton(null)}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <div style={styles.spinner}></div>
+                  <span>Registering...</span>
+                </>
+              ) : (
+                <>
+                  <span>Complete Registration</span>
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={styles.btnIcon}>
+                    <path
+                      fill="currentColor"
+                      d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z"
+                    />
+                  </svg>
+                </>
+              )}
+            </button>
 
-        <p style={styles.footerText}>
-          Already have an account? <span style={styles.link}>Login</span>
-        </p>
+            <button
+              type="button"
+              style={{
+                ...styles.submitBtn,
+                background: 'rgba(255, 255, 255, 0.05)',
+                color: '#fff',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: 'none',
+                marginTop: '5px'
+              }}
+              onClick={() => setNeedRoleSelection(false)}
+              disabled={loading}
+            >
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <>
+            <form onSubmit={handleSignup} style={styles.form}>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
+                    <path
+                      fill="currentColor"
+                      d="M8 0a4 4 0 100 8 4 4 0 000-8zM2 14c0-3.31 2.69-6 6-6s6 2.69 6 6H2z"
+                    />
+                  </svg>
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  style={styles.input}
+                  placeholder="Enter your name"
+                  disabled={loading}
+                />
+              </div>
+
+              <div style={role === "Student" ? { display: "flex", gap: "12px", width: "100%" } : {}}>
+                <div style={role === "Student" ? { ...styles.inputGroup, flex: 1 } : styles.inputGroup}>
+                  <label style={styles.label}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
+                      <path
+                        fill="currentColor"
+                        d="M8 8a3 3 0 100-6 3 3 0 000 6zm2-3a2 2 0 11-4 0 2 2 0 014 0zm4 8c0-1.66-3.58-3-8-3s-8 1.34-8 3v1h16v-1z"
+                      />
+                    </svg>
+                    Select Role
+                  </label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    style={styles.select}
+                    disabled={loading}
+                  >
+                    <option value="Teacher" style={styles.selectOption}>Teacher</option>
+                    <option value="Student" style={styles.selectOption}>Student</option>
+                  </select>
+                </div>
+
+                {role === "Student" && (
+                  <div style={{ ...styles.inputGroup, flex: 1 }}>
+                    <label style={styles.label}>
+                      <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
+                        <path
+                          fill="currentColor"
+                          d="M2 2a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V2zm3 1a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1z"
+                        />
+                      </svg>
+                      Roll Number
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={roll}
+                      onChange={(e) => setRoll(e.target.value)}
+                      style={styles.input}
+                      placeholder="Roll Number"
+                      disabled={loading}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
+                    <path
+                      fill="currentColor"
+                      d="M0 3a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H2a2 2 0 01-2-2V3zm2 0v.5l6 3.5 6-3.5V3H2zm12 2.5l-6 3.5-6-3.5V13h12V5.5z"
+                    />
+                  </svg>
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={styles.input}
+                  placeholder="Enter your email"
+                  disabled={loading}
+                />
+                <p style={styles.emailWarning}>
+                  ⚠️ Enter correct Gmail address to receive automated absence warnings.
+                </p>
+              </div>
+
+              <div style={{ display: "flex", gap: "12px", width: "100%" }}>
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                  <label style={styles.label}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
+                      <path
+                        fill="currentColor"
+                        d="M8 0a3 3 0 00-3 3v2H3a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1h-2V3a3 3 0 00-3-3zm1 3v2H7V3a1 1 0 112 0z"
+                      />
+                    </svg>
+                    Password
+                  </label>
+                  <div style={styles.passwordWrapper}>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      style={styles.input}
+                      placeholder="At least 8 chars"
+                      disabled={loading}
+                    />
+                    <button
+                      type="button"
+                      style={styles.eyeIcon}
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex="-1"
+                    >
+                      {showPassword ? (
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                          <path
+                            d="M3.26 11.602C3.942 8.327 6.793 6 10 6c3.206 0 6.057 2.327 6.74 5.602a.5.5 0 00.98-.204C16.943 7.673 13.711 5 10 5c-3.711 0-6.943 2.673-7.72 6.398a.5.5 0 00.98.204zM10 9a2 2 0 100 4 2 2 0 000-4z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M2 2l16 16"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                          <path
+                            d="M10 6C6.793 6 3.942 8.327 3.26 11.602a.5.5 0 01-.98-.204C3.057 7.673 6.289 5 10 5c3.711 0 6.943 2.673 7.72 6.398a.5.5 0 01-.98.204C16.057 8.327 13.206 6 10 6z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M10 9a2 2 0 100 4 2 2 0 000-4z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ ...styles.inputGroup, flex: 1 }}>
+                  <label style={styles.label}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
+                      <path
+                        fill="currentColor"
+                        d="M13 7h-1V5a4 4 0 00-8 0v2H3a1 1 0 00-1 1v6a1 1 0 001 1h10a1 1 0 001-1V8a1 1 0 00-1-1zM6 5a2 2 0 114 0v2H6V5z"
+                      />
+                    </svg>
+                    Confirm Password
+                  </label>
+                  <div style={styles.passwordWrapper}>
+                    <input
+                      type={showConf ? "text" : "password"}
+                      required
+                      value={confPassword}
+                      onChange={(e) => setConfPassword(e.target.value)}
+                      style={styles.input}
+                      placeholder="Confirm password"
+                      disabled={loading}
+                    />
+                    <button
+                      type="button"
+                      style={styles.eyeIcon}
+                      onClick={() => setShowConf(!showConf)}
+                      tabIndex="-1"
+                    >
+                      {showConf ? (
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                          <path
+                            d="M3.26 11.602C3.942 8.327 6.793 6 10 6c3.206 0 6.057 2.327 6.74 5.602a.5.5 0 00.98-.204C16.943 7.673 13.711 5 10 5c-3.711 0-6.943 2.673-7.72 6.398a.5.5 0 00.98.204zM10 9a2 2 0 100 4 2 2 0 000-4z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M2 2l16 16"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                          <path
+                            d="M10 6C6.793 6 3.942 8.327 3.26 11.602a.5.5 0 01-.98-.204C3.057 7.673 6.289 5 10 5c3.711 0 6.943 2.673 7.72 6.398a.5.5 0 01-.98.204C16.057 8.327 13.206 6 10 6z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M10 9a2 2 0 100 4 2 2 0 000-4z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                style={{
+                  ...styles.submitBtn,
+                  ...(hoveredButton === 'submit' ? styles.submitBtnHover : {}),
+                  ...(loading ? styles.submitBtnLoading : {}),
+                }}
+                onMouseEnter={() => setHoveredButton('submit')}
+                onMouseLeave={() => setHoveredButton(null)}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div style={styles.spinner}></div>
+                    <span>Creating Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign Up</span>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={styles.btnIcon}>
+                      <path
+                        fill="currentColor"
+                        d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z"
+                      />
+                    </svg>
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div style={styles.divider}>
+              <span style={styles.dividerText}>or</span>
+            </div>
+
+            <div style={styles.googleButtonWrapper}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleFailure}
+                theme="filled_blue"
+                shape="rectangular"
+                text="signup_with"
+                size="large"
+                width="370px"
+              />
+            </div>
+
+            <p style={styles.footerText}>
+              Already have an account? <span style={styles.link} onClick={onLoginLinkClick}>Login</span>
+            </p>
+          </>
+        )}
       </div>
 
       <style>{`
@@ -364,7 +651,7 @@ const styles = {
     borderRadius: "20px",
     width: "90%",
     maxWidth: "440px",
-    padding: "40px 35px",
+    padding: "24px 30px",
     boxShadow: "0 30px 80px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(16, 185, 129, 0.3)",
     position: "relative",
     animation: "slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -374,13 +661,13 @@ const styles = {
 
   closeBtn: {
     position: "absolute",
-    top: "20px",
-    right: "20px",
+    top: "15px",
+    right: "15px",
     background: "rgba(255, 255, 255, 0.1)",
     border: "none",
     borderRadius: "50%",
-    width: "36px",
-    height: "36px",
+    width: "32px",
+    height: "32px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -392,14 +679,14 @@ const styles = {
   logoContainer: {
     display: "flex",
     justifyContent: "center",
-    marginBottom: "25px",
+    marginBottom: "10px",
     filter: "drop-shadow(0 0 20px rgba(16, 185, 129, 0.4))",
   },
 
   title: {
     textAlign: "center",
-    marginBottom: "10px",
-    fontSize: "32px",
+    marginBottom: "5px",
+    fontSize: "26px",
     fontWeight: "700",
     background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
     WebkitBackgroundClip: "text",
@@ -416,30 +703,30 @@ const styles = {
   subtitle: {
     textAlign: "center",
     color: "#b3b3b3",
-    fontSize: "14px",
-    marginBottom: "30px",
+    fontSize: "13px",
+    marginBottom: "15px",
     fontWeight: "400",
   },
 
   form: {
     display: "flex",
     flexDirection: "column",
-    gap: "18px",
+    gap: "12px",
   },
 
   inputGroup: {
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: "5px",
   },
 
   label: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: "6px",
     fontWeight: "500",
     color: "#e0e0e0",
-    fontSize: "14px",
+    fontSize: "13px",
     letterSpacing: "0.3px",
   },
 
@@ -448,17 +735,37 @@ const styles = {
   },
 
   input: {
-    padding: "14px 16px",
+    padding: "10px 12px",
     borderRadius: "10px",
     border: "1px solid rgba(255, 255, 255, 0.1)",
-    fontSize: "15px",
+    fontSize: "14px",
+    outline: "none",
+    width: "100%",
+    background: "rgba(255, 255, 255, 0.05)",
+    transition: "all 0.3s ease",
+    color: "#fff",
+    fontFamily: "'Poppins', sans-serif",
+  },
+
+  select: {
+    padding: "10px 12px",
+    borderRadius: "10px",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    fontSize: "14px",
     outline: "none",
     width: "100%",
     background: "rgba(255, 255, 255, 0.05)",
     color: "#fff",
+    cursor: "pointer",
+    appearance: "none",
+    backgroundImage: "url(\"data:image/svg+xml;utf8,<svg fill='%2310b981' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>\")",
+    backgroundPosition: "right 12px center",
+    backgroundRepeat: "no-repeat",
+    paddingRight: "40px",
     transition: "all 0.3s ease",
     fontFamily: "'Poppins', sans-serif",
   },
+
 
   passwordWrapper: {
     position: "relative",
@@ -551,5 +858,21 @@ const styles = {
     fontWeight: "600",
     cursor: "pointer",
     transition: "color 0.3s ease",
+  },
+  emailWarning: {
+    fontSize: "11px",
+    color: "#f59e0b",
+    marginTop: "4px",
+    marginRight: "auto",
+    textAlign: "left",
+    lineHeight: "1.4",
+    opacity: 0.85,
+  },
+  googleButtonWrapper: {
+    display: "flex",
+    justifyContent: "center",
+    marginTop: "10px",
+    marginBottom: "10px",
+    width: "100%",
   },
 };

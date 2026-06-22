@@ -1,11 +1,12 @@
 import axios from "axios";
 import React from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 
 function MarkAtt() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [data, setdata] = React.useState({});
   const [stud, setstud] = React.useState([]);
@@ -14,6 +15,30 @@ function MarkAtt() {
   const [hoveredButton, setHoveredButton] = React.useState(null);
   const [hoveredRow, setHoveredRow] = React.useState(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+    if (!token) {
+      navigate("/");
+    } else if (role === "Student") {
+      navigate("/student-dashboard");
+    }
+  }, [navigate]);
+
+  // Get local date formatted as YYYY-MM-DD
+  const getLocalDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [selectedDate, setSelectedDate] = React.useState(
+    searchParams.get("date") || getLocalDateString()
+  );
+  const [isExistingRecord, setIsExistingRecord] = React.useState(false);
 
   // fetch room details
   React.useEffect(() => {
@@ -30,19 +55,12 @@ function MarkAtt() {
       });
   }, [id]);
 
-  // fetch students + initialize binary
+  // fetch students list once
   React.useEffect(() => {
     axios
       .get(`http://localhost:5000/getstudents/${id}`)
       .then((res) => {
         setstud(res.data.students || []);
-        setbinary(
-          (res.data.students || []).map((st) => ({
-            name: st.name,
-            value: 0,
-          }))
-        );
-        setload(true);
       })
       .catch((err) => {
         toast.error(err.response?.data?.message || err.message, {
@@ -52,17 +70,64 @@ function MarkAtt() {
       });
   }, [id]);
 
+  // fetch attendance for selectedDate or initialize binary to 0
+  React.useEffect(() => {
+    if (stud.length === 0) return;
+
+    setload(false);
+    axios
+      .get(`http://localhost:5000/attendance/${id}/${selectedDate}`)
+      .then((res) => {
+        const record = res.data.record;
+        setIsExistingRecord(true);
+
+        const recordStatusMap = {};
+        record.records.forEach((rec) => {
+          if (rec.studentId) {
+            recordStatusMap[rec.studentId.toString()] = rec.status;
+          }
+        });
+
+        setbinary(
+          stud.map((st) => ({
+            name: st.name,
+            value: recordStatusMap[st._id.toString()] === 'Present' ? 1 : 0,
+          }))
+        );
+        setload(true);
+      })
+      .catch((err) => {
+        // Attendance not marked for this date yet
+        setIsExistingRecord(false);
+        setbinary(
+          stud.map((st) => ({
+            name: st.name,
+            value: 0,
+          }))
+        );
+        setload(true);
+      });
+  }, [id, selectedDate, stud]);
+
   // confirm attendance
   const handleConf = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     
     try {
-      const res = await axios.post(`http://localhost:5000/confirmed/${id}`, { binary });
-      toast.success("Attendance marked successfully!", {
-        position: "top-right",
-        theme: "dark",
+      await axios.post(`http://localhost:5000/confirmed/${id}`, {
+        binary,
+        date: selectedDate
       });
+      toast.success(
+        isExistingRecord
+          ? "Attendance updated successfully!"
+          : "Attendance marked successfully!",
+        {
+          position: "top-right",
+          theme: "dark",
+        }
+      );
       setTimeout(() => navigate(-1), 1000);
     } catch (err) {
       toast.error(err.response?.data?.message || err.message, {
@@ -88,7 +153,7 @@ function MarkAtt() {
   const attendancePercentage = binary.length > 0 ? Math.round((presentCount / binary.length) * 100) : 0;
 
   return load ? (
-    <div style={styles.container}>
+    <div className="mark-att-container" style={styles.container}>
       {/* Back Button */}
       <button
         style={{
@@ -109,7 +174,7 @@ function MarkAtt() {
       </button>
 
       {/* Header Card */}
-      <div style={styles.headerCard}>
+      <div className="mark-att-header-card" style={styles.headerCard}>
         <div style={styles.headerIcon}>
           <svg width="50" height="50" viewBox="0 0 50 50">
             <defs>
@@ -125,10 +190,27 @@ function MarkAtt() {
           </svg>
         </div>
         <h1 style={styles.title}>{data.cname}</h1>
-        <p style={styles.subtitle}>Mark attendance for today's session</p>
+        <div style={styles.dateSelectorContainer}>
+          <label style={styles.dateLabel} htmlFor="attendance-date">
+            Attendance Session Date:
+          </label>
+          <input
+            id="attendance-date"
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            style={styles.dateInput}
+            className="date-input"
+          />
+          {isExistingRecord && (
+            <p style={styles.editingBadge}>
+              ⚠️ Viewing marked session. Updates will edit existing attendance.
+            </p>
+          )}
+        </div>
 
         {/* Statistics */}
-        <div style={styles.statsContainer}>
+        <div className="mark-att-stats-container" style={styles.statsContainer}>
           <div style={styles.statBox}>
             <span style={styles.statValue}>{binary.length}</span>
             <span style={styles.statLabel}>Total</span>
@@ -149,7 +231,7 @@ function MarkAtt() {
       </div>
 
       {/* Attendance Table */}
-      <div style={styles.tableCard}>
+      <div className="mark-att-table-card" style={styles.tableCard}>
         <div style={styles.tableHeader}>
           <h3 style={styles.tableTitle}>Student Attendance</h3>
           <div style={styles.tableBadge}>{stud.length} Students</div>
@@ -313,6 +395,17 @@ function MarkAtt() {
             transform: scale(1.05);
           }
         }
+
+        .date-input:focus {
+          border-color: rgba(229, 9, 20, 0.6) !important;
+          box-shadow: 0 0 15px rgba(229, 9, 20, 0.3) !important;
+          background-color: rgba(255, 255, 255, 0.1) !important;
+        }
+
+        .date-input::-webkit-calendar-picker-indicator {
+          filter: invert(1);
+          cursor: pointer;
+        }
       `}</style>
     </div>
   ) : (
@@ -328,6 +421,41 @@ function MarkAtt() {
 }
 
 const styles = {
+  dateSelectorContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "10px",
+    marginTop: "10px",
+    marginBottom: "20px",
+  },
+  dateLabel: {
+    color: "#b3b3b3",
+    fontSize: "14px",
+    fontWeight: "500",
+    letterSpacing: "0.5px",
+  },
+  dateInput: {
+    background: "rgba(255, 255, 255, 0.05)",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    padding: "10px 20px",
+    borderRadius: "8px",
+    color: "#fff",
+    fontSize: "16px",
+    fontFamily: "'Poppins', sans-serif",
+    outline: "none",
+    transition: "all 0.3s ease",
+    cursor: "pointer",
+    boxShadow: "0 4px 15px rgba(0, 0, 0, 0.2)",
+    textAlign: "center",
+  },
+  editingBadge: {
+    color: "#f59e0b",
+    fontSize: "13px",
+    fontWeight: "500",
+    margin: "5px 0 0 0",
+  },
   container: {
     padding: "40px 20px",
     fontFamily: "'Poppins', sans-serif",

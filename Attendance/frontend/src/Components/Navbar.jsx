@@ -38,13 +38,13 @@ export default function Navbar() {
     <>
       <AddCroom trigger={addRoom} setTrigger={setAddRoom} datax={user.userid} />
 
-      <nav style={{
+      <nav className="navbar-main" style={{
         ...styles.navbar,
         ...(scrolled ? styles.navbarScrolled : {}),
       }}>
-        <div style={styles.container}>
-          <div style={styles.left}>
-            <div style={styles.logoWrapper}>
+        <div className="navbar-container" style={styles.container}>
+          <div className="navbar-left" style={styles.left}>
+            <div className="navbar-logo-wrapper" style={styles.logoWrapper}>
               <svg width="40" height="40" viewBox="0 0 40 40" style={styles.logo}>
                 <defs>
                   <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -59,45 +59,49 @@ export default function Navbar() {
                   opacity="0.9"
                 />
               </svg>
-              <div style={styles.brandInfo}>
-                <span style={styles.brandName}>Attendance</span>
-                <span style={styles.brandTagline}>Tracker</span>
+              <div className="navbar-brand-info" style={styles.brandInfo}>
+                <span className="navbar-brand-name" style={styles.brandName}>Attendance</span>
+                <span className="navbar-brand-tagline" style={styles.brandTagline}>Tracker</span>
               </div>
             </div>
             
-            <div style={styles.welcomeSection}>
-              <p style={styles.welcome}>
+            <div className="navbar-welcome-section" style={styles.welcomeSection}>
+              <p className="navbar-welcome" style={styles.welcome}>
                 Welcome back,{" "}
-                <span style={styles.username}>{user?.name || "User"}</span>
+                <span className="navbar-username" style={styles.username}>{user?.name || "User"}</span>
               </p>
-              <div style={styles.statusIndicator}>
+              <div className="navbar-status-indicator" style={styles.statusIndicator}>
                 <div style={styles.statusDot}></div>
-                <span style={styles.statusText}>Online</span>
+                <span className="navbar-status-text" style={styles.statusText}>Online</span>
               </div>
             </div>
           </div>
 
-          <div style={styles.right}>
-            <button
-              style={{
-                ...styles.button,
-                ...styles.addButton,
-                ...(hoveredButton === "add" ? styles.addButtonHover : {}),
-              }}
-              onClick={() => setAddRoom(true)}
-              onMouseEnter={() => setHoveredButton("add")}
-              onMouseLeave={() => setHoveredButton(null)}
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" style={styles.buttonIcon}>
-                <path
-                  fill="currentColor"
-                  d="M9 0a1 1 0 011 1v7h7a1 1 0 110 2h-7v7a1 1 0 11-2 0v-7H1a1 1 0 110-2h7V1a1 1 0 011-1z"
-                />
-              </svg>
-              <span style={styles.buttonText}>Add Classroom</span>
-            </button>
+          <div className="navbar-right" style={styles.right}>
+            {user?.role !== 'Student' && (
+              <button
+                className="navbar-btn navbar-add-btn"
+                style={{
+                  ...styles.button,
+                  ...styles.addButton,
+                  ...(hoveredButton === "add" ? styles.addButtonHover : {}),
+                }}
+                onClick={() => setAddRoom(true)}
+                onMouseEnter={() => setHoveredButton("add")}
+                onMouseLeave={() => setHoveredButton(null)}
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" style={styles.buttonIcon}>
+                  <path
+                    fill="currentColor"
+                    d="M9 0a1 1 0 011 1v7h7a1 1 0 110 2h-7v7a1 1 0 11-2 0v-7H1a1 1 0 110-2h7V1a1 1 0 011-1z"
+                  />
+                </svg>
+                <span className="navbar-button-text" style={styles.buttonText}>Add Classroom</span>
+              </button>
+            )}
 
             <button
+              className="navbar-btn navbar-logout-btn"
               style={{
                 ...styles.button,
                 ...styles.logoutButton,
@@ -113,7 +117,7 @@ export default function Navbar() {
                   d="M7 2a1 1 0 00-1 1v12a1 1 0 001 1h4a1 1 0 100-2H8V4h3a1 1 0 100-2H7zm6.707 4.293a1 1 0 00-1.414 1.414L13.586 9H7a1 1 0 100 2h6.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3z"
                 />
               </svg>
-              <span style={styles.buttonText}>Logout</span>
+              <span className="navbar-button-text" style={styles.buttonText}>Logout</span>
             </button>
           </div>
         </div>

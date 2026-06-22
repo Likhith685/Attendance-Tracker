@@ -1,20 +1,33 @@
 import React from "react";
 import axios from "axios";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 
 export default function Home() {
+  const navigate = useNavigate();
   const [user, setUser] = React.useState(null);
   const [rooms, setRooms] = React.useState([]);
   const [loadingUser, setLoadingUser] = React.useState(true);
   const [loadingRooms, setLoadingRooms] = React.useState(true);
   const [header, setHeader] = React.useState("Your Classrooms");
-   const [hoveredCard, setHoveredCard] = React.useState(null);
+  const [hoveredCard, setHoveredCard] = React.useState(null);
 
   React.useEffect(() => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+    if (!token) {
+      navigate("/");
+    } else if (role === "Student") {
+      navigate("/student-dashboard");
+    }
+  }, [navigate]);
+
+  React.useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
     axios
       .get("http://localhost:5000/user", {
-        headers: { token: localStorage.getItem("token") },
+        headers: { token },
       })
       .then((res) => {
         setUser(res.data);
@@ -50,7 +63,7 @@ export default function Home() {
   }
 
 return (
-      <div style={styles.container}>
+      <div className="home-container" style={styles.container}>
         <ToastContainer
           position="top-right"
           autoClose={3000}
@@ -66,11 +79,11 @@ return (
         />
         
         <div style={styles.header}>
-          <h1 style={styles.title}>{header}</h1>
+          <h1 className="home-title" style={styles.title}>{header}</h1>
           <div style={styles.titleUnderline}></div>
         </div>
         
-        <div style={styles.grid}>
+        <div className="home-grid" style={styles.grid}>
           {rooms.map((room, index) => (
             <div
               key={room._id}
@@ -197,8 +210,8 @@ const styles = {
   
   cardHover: {
     transform: "translateY(-12px) scale(1.03)",
-    boxShadow: "0 20px 60px rgba(229, 9, 20, 0.4), 0 0 0 1px rgba(229, 9, 20, 0.3)",
-    border: "1px solid rgba(229, 9, 20, 0.5)",
+    boxShadow: "0 20px 50px rgba(229, 9, 20, 0.25), 0 0 30px rgba(6, 182, 212, 0.25)",
+    border: "1px solid rgba(6, 182, 212, 0.5)",
   },
   
   cardGlow: {

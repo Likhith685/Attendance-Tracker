@@ -10,6 +10,100 @@ export default function AddStudent({ trigger, setTrigger, roomid, reload, setrel
   const [loading, setLoading] = useState(false);
   const [hoveredButton, setHoveredButton] = useState(null);
 
+  // Bulk CSV import state
+  const [activeTab, setActiveTab] = useState("single");
+  const [csvFile, setCsvFile] = useState(null);
+  const [parsedStudents, setParsedStudents] = useState([]);
+  const [csvErrors, setCsvErrors] = useState([]);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const processFile = (file) => {
+    setCsvFile(file);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const { data, errors } = parseCSV(text);
+      setParsedStudents(data);
+      setCsvErrors(errors);
+    };
+    reader.onerror = () => {
+      setCsvErrors(["Failed to read CSV file."]);
+    };
+    reader.readAsText(file);
+  };
+
+  const parseCSV = (text) => {
+    const lines = text.split(/\r?\n/);
+    const results = [];
+    const errors = [];
+    const rolls = new Set();
+    
+    let startIdx = 0;
+    if (lines.length > 0) {
+      const firstLine = lines[0].toLowerCase();
+      if (firstLine.includes("name") || firstLine.includes("roll")) {
+        startIdx = 1;
+      }
+    }
+
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const columns = line.split(",").map(col => col.trim());
+      if (columns.length < 2) {
+        errors.push(`Row ${i + 1}: Must have at least Name and Roll Number.`);
+        continue;
+      }
+      
+      const name = columns[0];
+      const rollStr = columns[1];
+      const roll = Number(rollStr);
+      const attendanceStr = columns[2];
+      const attendance = attendanceStr ? Number(attendanceStr) : 0;
+      
+      if (!name) {
+        errors.push(`Row ${i + 1}: Name is empty.`);
+        continue;
+      }
+      if (isNaN(roll)) {
+        errors.push(`Row ${i + 1}: Roll number "${rollStr}" is not a valid number.`);
+        continue;
+      }
+      if (rolls.has(roll)) {
+        errors.push(`Row ${i + 1}: Duplicate roll number ${roll} in file.`);
+        continue;
+      }
+      if (attendanceStr && isNaN(attendance)) {
+        errors.push(`Row ${i + 1}: Attendance "${attendanceStr}" is not a valid number.`);
+        continue;
+      }
+      
+      rolls.add(roll);
+      results.push({ name, roll, attendance });
+    }
+    
+    return { data: results, errors };
+  };
+
+  const downloadTemplate = () => {
+    const csvContent = "data:text/csv;charset=utf-8,Name,Roll,Attendance\nJohn Doe,101,15\nJane Smith,102,12\nBob Johnson,103,0";
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "student_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -44,12 +138,52 @@ export default function AddStudent({ trigger, setTrigger, roomid, reload, setrel
     }
   };
 
+  const handleBulkSubmit = async (e) => {
+    e.preventDefault();
+    if (parsedStudents.length === 0 || csvErrors.length > 0) return;
+    setLoading(true);
+
+    try {
+      const response = await axios.post("http://localhost:5000/createstudents-bulk", {
+        roomid,
+        students: parsedStudents
+      });
+
+      toast.success(response.data.message || "Students imported successfully!", { 
+        position: "top-right",
+        theme: "dark",
+      });
+      setTrigger(false);
+      setreload(!reload);
+      
+      // Reset bulk state
+      setCsvFile(null);
+      setParsedStudents([]);
+      setCsvErrors([]);
+    } catch (err) {
+      const message = err.response?.data?.message || "Bulk upload failed";
+      toast.error(message, { 
+        position: "top-right",
+        theme: "dark",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!trigger) return null;
 
   return (
     <div style={styles.overlay} onClick={() => setTrigger(false)}>
       <ToastContainer />
-      <div style={styles.card} onClick={(e) => e.stopPropagation()}>
+      <div 
+        style={{
+          ...styles.card, 
+          maxWidth: activeTab === 'single' ? '450px' : '650px',
+          transition: "max-width 0.3s ease"
+        }} 
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Close Button */}
         <button 
           style={styles.closeBtn} 
@@ -109,102 +243,272 @@ export default function AddStudent({ trigger, setTrigger, roomid, reload, setrel
             'Add Student'
           )}
         </h2>
-        <p style={styles.subtitle}>Add a new student to this classroom</p>
+        <p style={styles.subtitle}>Add a new student or import bulk roster</p>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>
-              <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
-                <path
-                  fill="currentColor"
-                  d="M8 0a4 4 0 100 8 4 4 0 000-8zM2 14c0-3.31 2.69-6 6-6s6 2.69 6 6H2z"
-                />
-              </svg>
-              Student Name
-            </label>
-            <input
-              type="text"
-              placeholder="Enter student's full name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              style={styles.input}
-              disabled={loading}
-            />
-          </div>
-
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>
-              <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
-                <path
-                  fill="currentColor"
-                  d="M2 2a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V2zm3 1a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1z"
-                />
-              </svg>
-              Roll Number
-            </label>
-            <input
-              type="number"
-              placeholder="Enter roll number"
-              value={roll}
-              onChange={(e) => setRoll(e.target.value)}
-              required
-              style={styles.input}
-              disabled={loading}
-            />
-          </div>
-
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>
-              <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
-                <path
-                  fill="currentColor"
-                  d="M13.854 3.646a.5.5 0 010 .708l-7 7a.5.5 0 01-.708 0l-3.5-3.5a.5.5 0 11.708-.708L6.5 10.293l6.646-6.647a.5.5 0 01.708 0z"
-                />
-              </svg>
-              Current Attendance
-            </label>
-            <input
-              type="number"
-              placeholder="Enter current attendance count"
-              value={att}
-              onChange={(e) => setAtt(e.target.value)}
-              required
-              style={styles.input}
-              disabled={loading}
-              min="0"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
+        {/* Tab Switcher */}
+        <div style={styles.tabContainer}>
+          <button 
+            type="button"
             style={{
-              ...styles.submitBtn,
-              ...(hoveredButton === 'submit' ? styles.submitBtnHover : {}),
-              ...(loading ? styles.submitBtnLoading : {}),
+              ...styles.tab, 
+              ...(activeTab === 'single' ? styles.activeTab : {}),
             }}
-            onMouseEnter={() => setHoveredButton('submit')}
-            onMouseLeave={() => setHoveredButton(null)}
+            onClick={() => setActiveTab('single')}
           >
-            {loading ? (
-              <>
-                <div style={styles.spinner}></div>
-                <span>Adding Student...</span>
-              </>
-            ) : (
-              <>
-                <svg width="18" height="18" viewBox="0 0 18 18" style={styles.btnIcon}>
+            Single Student
+          </button>
+          <button 
+            type="button"
+            style={{
+              ...styles.tab, 
+              ...(activeTab === 'bulk' ? styles.activeTab : {}),
+            }}
+            onClick={() => setActiveTab('bulk')}
+          >
+            Bulk CSV Import
+          </button>
+        </div>
+
+        {activeTab === "single" ? (
+          <form onSubmit={handleSubmit} style={styles.form}>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>
+                <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
                   <path
                     fill="currentColor"
-                    d="M9 0a1 1 0 011 1v7h7a1 1 0 110 2h-7v7a1 1 0 11-2 0v-7H1a1 1 0 110-2h7V1a1 1 0 011-1z"
+                    d="M8 0a4 4 0 100 8 4 4 0 000-8zM2 14c0-3.31 2.69-6 6-6s6 2.69 6 6H2z"
                   />
                 </svg>
-                <span>Add Student</span>
-              </>
+                Student Name
+              </label>
+              <input
+                type="text"
+                placeholder="Enter student's full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                style={styles.input}
+                disabled={loading}
+              />
+            </div>
+
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>
+                <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
+                  <path
+                    fill="currentColor"
+                    d="M2 2a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V2zm3 1a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H6a1 1 0 01-1-1z"
+                  />
+                </svg>
+                Roll Number
+              </label>
+              <input
+                type="number"
+                placeholder="Enter roll number"
+                value={roll}
+                onChange={(e) => setRoll(e.target.value)}
+                required
+                style={styles.input}
+                disabled={loading}
+              />
+            </div>
+
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>
+                <svg width="16" height="16" viewBox="0 0 16 16" style={styles.labelIcon}>
+                  <path
+                    fill="currentColor"
+                    d="M13.854 3.646a.5.5 0 010 .708l-7 7a.5.5 0 01-.708 0l-3.5-3.5a.5.5 0 11.708-.708L6.5 10.293l6.646-6.647a.5.5 0 01.708 0z"
+                  />
+                </svg>
+                Current Attendance
+              </label>
+              <input
+                type="number"
+                placeholder="Enter current attendance count"
+                value={att}
+                onChange={(e) => setAtt(e.target.value)}
+                required
+                style={styles.input}
+                disabled={loading}
+                min="0"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                ...styles.submitBtn,
+                ...(hoveredButton === 'submit' ? styles.submitBtnHover : {}),
+                ...(loading ? styles.submitBtnLoading : {}),
+              }}
+              onMouseEnter={() => setHoveredButton('submit')}
+              onMouseLeave={() => setHoveredButton(null)}
+            >
+              {loading ? (
+                <>
+                  <div style={styles.spinner}></div>
+                  <span>Adding Student...</span>
+                </>
+              ) : (
+                <>
+                  <svg width="18" height="18" viewBox="0 0 18 18" style={styles.btnIcon}>
+                    <path
+                      fill="currentColor"
+                      d="M9 0a1 1 0 011 1v7h7a1 1 0 110 2h-7v7a1 1 0 11-2 0v-7H1a1 1 0 110-2h7V1a1 1 0 011-1z"
+                    />
+                  </svg>
+                  <span>Add Student</span>
+                </>
+              )}
+            </button>
+          </form>
+        ) : (
+          <div>
+            {/* Guidelines Card */}
+            <div style={styles.templateCard}>
+              <div style={styles.templateTitle}>
+                <span>CSV Template Guidelines</span>
+                <button 
+                  type="button" 
+                  onClick={downloadTemplate} 
+                  style={styles.templateLink}
+                >
+                  Download Sample CSV
+                </button>
+              </div>
+              <p style={{ color: "#aaa", fontSize: "12px", margin: "0 0 8px 0", textAlign: "left" }}>
+                Make sure your CSV file is formatted exactly as shown below:
+              </p>
+              <pre style={styles.templateCode}>
+{`Name, Roll, Attendance
+John Doe, 101, 15
+Jane Smith, 102, 12`}
+              </pre>
+            </div>
+
+            {/* Drag & Drop Area */}
+            <div 
+              style={{
+                ...styles.dropzone,
+                ...(dragOver ? styles.dropzoneHover : {})
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files[0];
+                if (file && file.name.endsWith('.csv')) {
+                  processFile(file);
+                } else {
+                  toast.error("Please drop a valid .csv file", { theme: "dark" });
+                }
+              }}
+              onClick={() => document.getElementById("csvFileInput").click()}
+            >
+              <input 
+                id="csvFileInput"
+                type="file" 
+                accept=".csv" 
+                onChange={handleFileChange}
+                style={{ display: "none" }}
+              />
+              
+              {csvFile ? (
+                <div style={styles.fileInfo}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                  </svg>
+                  <span>{csvFile.name} ({(csvFile.size / 1024).toFixed(2)} KB)</span>
+                </div>
+              ) : (
+                <div>
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: "#3b82f6" }}>
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                  </svg>
+                  <div style={styles.dropzoneText}>Drag & drop CSV file here, or click to browse</div>
+                  <div style={styles.dropzoneSubtext}>Only CSV files are supported</div>
+                </div>
+              )}
+            </div>
+
+            {/* Error alerts */}
+            {csvErrors.length > 0 && (
+              <div style={styles.errorBox}>
+                <div style={styles.errorTitle}>Validation Errors ({csvErrors.length})</div>
+                {csvErrors.map((err, i) => (
+                  <div key={i} style={styles.errorText}>• {err}</div>
+                ))}
+              </div>
             )}
-          </button>
-        </form>
+
+            {/* Preview Table */}
+            {parsedStudents.length > 0 && csvErrors.length === 0 && (
+              <div>
+                <div style={{ ...styles.templateTitle, marginBottom: "8px" }}>
+                  <span>Roster Preview ({parsedStudents.length} students found)</span>
+                </div>
+                <div style={styles.previewContainer}>
+                  <table style={styles.previewTable}>
+                    <thead>
+                      <tr>
+                        <th style={styles.previewHeader}>Roll</th>
+                        <th style={styles.previewHeader}>Name</th>
+                        <th style={styles.previewHeader}>Attendance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedStudents.map((s, idx) => (
+                        <tr key={idx} style={styles.previewRow}>
+                          <td style={styles.previewCell}>{s.roll}</td>
+                          <td style={styles.previewCell}>{s.name}</td>
+                          <td style={styles.previewCell}>{s.attendance}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              type="button"
+              disabled={loading || parsedStudents.length === 0 || csvErrors.length > 0}
+              onClick={handleBulkSubmit}
+              style={{
+                ...styles.submitBtn,
+                ...(hoveredButton === 'bulk-submit' ? styles.submitBtnHover : {}),
+                ...((loading || parsedStudents.length === 0 || csvErrors.length > 0) ? styles.submitBtnLoading : {}),
+              }}
+              onMouseEnter={() => setHoveredButton('bulk-submit')}
+              onMouseLeave={() => setHoveredButton(null)}
+            >
+              {loading ? (
+                <>
+                  <div style={styles.spinner}></div>
+                  <span>Importing Students...</span>
+                </>
+              ) : (
+                <>
+                  <svg width="18" height="18" viewBox="0 0 18 18" style={styles.btnIcon}>
+                    <path fill="currentColor" d="M9 1a1 1 0 011 1v7h7a1 1 0 110 2h-7v7a1 1 0 11-2 0v-7H1a1 1 0 110-2h7V2a1 1 0 011-1z" />
+                  </svg>
+                  <span>Import {parsedStudents.length > 0 ? parsedStudents.length : ""} Students</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       <style>{`
@@ -413,5 +717,176 @@ const styles = {
     borderTop: "2px solid #fff",
     borderRadius: "50%",
     animation: "spin 0.8s linear infinite",
+  },
+
+  tabContainer: {
+    display: "flex",
+    background: "rgba(255, 255, 255, 0.05)",
+    borderRadius: "10px",
+    padding: "4px",
+    marginBottom: "25px",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+  },
+
+  tab: {
+    flex: 1,
+    padding: "10px",
+    border: "none",
+    borderRadius: "8px",
+    background: "transparent",
+    color: "#b3b3b3",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "600",
+    transition: "all 0.3s ease",
+    fontFamily: "'Poppins', sans-serif",
+  },
+
+  activeTab: {
+    background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+    color: "#fff",
+    boxShadow: "0 4px 15px rgba(59, 130, 246, 0.3)",
+  },
+
+  dropzone: {
+    border: "2px dashed rgba(59, 130, 246, 0.4)",
+    borderRadius: "12px",
+    padding: "30px 20px",
+    textAlign: "center",
+    cursor: "pointer",
+    background: "rgba(59, 130, 246, 0.02)",
+    transition: "all 0.3s ease",
+    marginBottom: "20px",
+  },
+
+  dropzoneHover: {
+    borderColor: "#3b82f6",
+    background: "rgba(59, 130, 246, 0.08)",
+    transform: "scale(1.01)",
+  },
+
+  dropzoneText: {
+    color: "#e0e0e0",
+    fontSize: "14px",
+    marginTop: "10px",
+  },
+
+  dropzoneSubtext: {
+    color: "#888",
+    fontSize: "12px",
+    marginTop: "5px",
+  },
+
+  fileInfo: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "10px",
+    color: "#3b82f6",
+    fontWeight: "500",
+    fontSize: "14px",
+  },
+
+  templateCard: {
+    background: "rgba(255, 255, 255, 0.02)",
+    border: "1px solid rgba(255, 255, 255, 0.05)",
+    borderRadius: "10px",
+    padding: "15px",
+    marginBottom: "20px",
+    textAlign: "left",
+  },
+
+  templateTitle: {
+    color: "#fff",
+    fontSize: "13px",
+    fontWeight: "600",
+    marginBottom: "8px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  templateLink: {
+    color: "#3b82f6",
+    fontSize: "12px",
+    cursor: "pointer",
+    textDecoration: "underline",
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontWeight: "500",
+  },
+
+  templateCode: {
+    fontFamily: "monospace",
+    background: "rgba(0, 0, 0, 0.3)",
+    padding: "8px 12px",
+    borderRadius: "6px",
+    color: "#a9b7c6",
+    fontSize: "12px",
+    overflowX: "auto",
+    whiteSpace: "pre-wrap",
+    border: "1px solid rgba(255, 255, 255, 0.03)",
+  },
+
+  previewContainer: {
+    maxHeight: "200px",
+    overflowY: "auto",
+    marginBottom: "20px",
+    borderRadius: "10px",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+  },
+
+  previewTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: "13px",
+    color: "#e0e0e0",
+  },
+
+  previewHeader: {
+    background: "rgba(255, 255, 255, 0.05)",
+    color: "#fff",
+    padding: "10px",
+    fontWeight: "600",
+    textAlign: "left",
+    position: "sticky",
+    top: 0,
+    borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+  },
+
+  previewRow: {
+    borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+  },
+
+  previewCell: {
+    padding: "10px",
+    textAlign: "left",
+  },
+
+  errorBox: {
+    background: "rgba(239, 68, 68, 0.1)",
+    border: "1px solid rgba(239, 68, 68, 0.3)",
+    borderRadius: "10px",
+    padding: "15px",
+    marginBottom: "20px",
+    textAlign: "left",
+    maxHeight: "150px",
+    overflowY: "auto",
+  },
+
+  errorTitle: {
+    color: "#ef4444",
+    fontSize: "13px",
+    fontWeight: "600",
+    marginBottom: "5px",
+  },
+
+  errorText: {
+    color: "#fca5a5",
+    fontSize: "12px",
+    margin: "4px 0",
+    paddingLeft: "10px",
+    textAlign: "left",
   },
 };

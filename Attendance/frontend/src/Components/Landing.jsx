@@ -159,7 +159,19 @@ export default function Landing() {
       <Signup
         trigger={showSignup}
         setTrigger={setShowSignup}
-        onSuccess={() => {
+        onSuccess={(role) => {
+          setShowSignup(false);
+          if (role) {
+            if (role === 'Student') {
+              window.location.href = "/student-dashboard";
+            } else {
+              window.location.href = "/home";
+            }
+          } else {
+            setShowLogin(true);
+          }
+        }}
+        onLoginLinkClick={() => {
           setShowSignup(false);
           setShowLogin(true);
         }}
@@ -167,9 +179,17 @@ export default function Landing() {
       <Login
         trigger={showLogin}
         setTrigger={setShowLogin}
-        onSuccess={() => {
+        onSuccess={(role) => {
           setShowLogin(false);
-          window.location.href = "/home";
+          if (role === 'Student') {
+            window.location.href = "/student-dashboard";
+          } else {
+            window.location.href = "/home";
+          }
+        }}
+        onSignupLinkClick={() => {
+          setShowLogin(false);
+          setShowSignup(true);
         }}
       />
 

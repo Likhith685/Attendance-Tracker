@@ -22,6 +22,26 @@ const userSchema = new Schema({
     days:{
         type:Number,
         required:true,
+    },
+    checkInActive: {
+        type: Boolean,
+        default: false
+    },
+    checkInCode: {
+        type: String,
+        required: false
+    },
+    checkInLatitude: {
+        type: Number,
+        required: false
+    },
+    checkInLongitude: {
+        type: Number,
+        required: false
+    },
+    checkInExpiresAt: {
+        type: Date,
+        required: false
     }
 })
 

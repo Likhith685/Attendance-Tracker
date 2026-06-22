@@ -3,6 +3,19 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import AddStudent from "./AddStudent";
 import EditRoom from "./EditRoom";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
+
+
 
 export default function ViewCroom() {
   const { id } = useParams();
@@ -17,12 +30,68 @@ export default function ViewCroom() {
   const [refresh, setRefresh] = useState(false);
   const [hoveredButton, setHoveredButton] = useState(null);
   const [hoveredRow, setHoveredRow] = useState(null);
+  const [attendanceDates, setAttendanceDates] = useState([]);
+
+  // Self Check-in states
+  const [checkInModal, setCheckInModal] = useState(false);
+  const [checkInActive, setCheckInActive] = useState(false);
+  const [checkInCode, setCheckInCode] = useState("");
+  const [checkInExpiresAt, setCheckInExpiresAt] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [locLoading, setLocLoading] = useState(false);
+  const [locError, setLocError] = useState("");
+  const [userCoords, setUserCoords] = useState(null);
+  const [duration, setDuration] = useState(5);
+  const [requireLocation, setRequireLocation] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+    if (!token) {
+      navigate("/");
+    } else if (role === "Student") {
+      navigate("/student-dashboard");
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!checkInActive || !checkInExpiresAt) return;
+    
+    const interval = setInterval(() => {
+      const ms = new Date(checkInExpiresAt).getTime() - Date.now();
+      if (ms <= 0) {
+        setCheckInActive(false);
+        setCheckInCode("");
+        setCheckInExpiresAt(null);
+        setTimeLeft(0);
+        clearInterval(interval);
+      } else {
+        setTimeLeft(Math.max(0, Math.floor(ms / 1000)));
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [checkInActive, checkInExpiresAt]);
 
   useEffect(() => {
     const fetchRoom = async () => {
       try {
         const res = await axios.get(`http://localhost:5000/getroom/${id}`);
         setRoom(res.data.room);
+        
+        if (res.data.room.checkInActive) {
+          setCheckInActive(true);
+          setCheckInCode(res.data.room.checkInCode);
+          setCheckInExpiresAt(res.data.room.checkInExpiresAt);
+          
+          const ms = new Date(res.data.room.checkInExpiresAt).getTime() - Date.now();
+          setTimeLeft(Math.max(0, Math.floor(ms / 1000)));
+        } else {
+          setCheckInActive(false);
+          setCheckInCode("");
+          setCheckInExpiresAt(null);
+          setTimeLeft(0);
+        }
       } catch (err) {
         console.error(err);
       }
@@ -40,8 +109,18 @@ export default function ViewCroom() {
       }
     };
 
+    const fetchAttendanceDates = async () => {
+      try {
+        const res = await axios.get(`http://localhost:5000/attendance-dates/${id}`);
+        setAttendanceDates(res.data.dates || []);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
     fetchRoom();
     fetchStudents();
+    fetchAttendanceDates();
   }, [id, refresh]);
 
   const handleDeleteStudent = async (studentId) => {
@@ -63,6 +142,72 @@ export default function ViewCroom() {
       }
     }
   };
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      setLocError("Geolocation is not supported by your browser");
+      return;
+    }
+    setLocLoading(true);
+    setLocError("");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserCoords({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+        setLocLoading(false);
+      },
+      (error) => {
+        console.error(error);
+        setLocError("Failed to retrieve location. Please check browser settings and allow location access.");
+        setLocLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const handleStartCheckIn = async () => {
+    try {
+      const payload = {
+        duration: Number(duration)
+      };
+      if (requireLocation) {
+        if (!userCoords) {
+          setLocError("Location coordinates are required to start location-verified check-in.");
+          return;
+        }
+        payload.latitude = userCoords.latitude;
+        payload.longitude = userCoords.longitude;
+      }
+      
+      const res = await axios.post(`http://localhost:5000/classroom/${id}/start-checkin`, payload);
+      setCheckInActive(true);
+      setCheckInCode(res.data.code);
+      setCheckInExpiresAt(res.data.expiresAt);
+      
+      const ms = new Date(res.data.expiresAt).getTime() - Date.now();
+      setTimeLeft(Math.max(0, Math.floor(ms / 1000)));
+      
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || "Failed to start check-in session");
+    }
+  };
+
+  const handleStopCheckIn = async () => {
+    try {
+      await axios.post(`http://localhost:5000/classroom/${id}/stop-checkin`);
+      setCheckInActive(false);
+      setCheckInCode("");
+      setCheckInExpiresAt(null);
+      setTimeLeft(0);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to stop check-in session");
+    }
+  };
+
 
   if (loading) {
     return (
@@ -100,6 +245,117 @@ export default function ViewCroom() {
           ccode={room.ccode}
           days={room.days}
         />
+
+        {/* Check-In Modal */}
+        {checkInModal && (
+          <div style={styles.modalOverlay}>
+            <div style={styles.modalContent}>
+              <div style={styles.modalHeader}>
+                <h3 style={styles.modalTitle}>Self Check-in Portal</h3>
+                <button style={styles.modalCloseBtn} onClick={() => setCheckInModal(false)}>×</button>
+              </div>
+              
+              {checkInActive ? (
+                <div style={styles.activeContainer}>
+                  <div style={styles.activePulse}>
+                    <div style={styles.pulseInner}></div>
+                    <span style={styles.activeStatusText}>Check-in Session Active</span>
+                  </div>
+                  
+                  <p style={styles.activeSubtext}>Ask students to visit their dashboard and enter the code below:</p>
+                  
+                  <div style={styles.codeWrapper}>
+                    <div style={styles.codeLabel}>6-Digit PIN</div>
+                    <div style={styles.codeDisplay}>{checkInCode}</div>
+                  </div>
+                  
+                  <div style={styles.timerWrapper}>
+                    <span style={styles.timerLabel}>Time Remaining:</span>
+                    <span style={styles.timerValue}>
+                      {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                    </span>
+                  </div>
+
+                  <button 
+                    style={{...styles.btn, ...styles.btnDelete, width: '100%', marginTop: '20px', justifyContent: 'center'}}
+                    onClick={handleStopCheckIn}
+                  >
+                    Stop Check-in Session
+                  </button>
+                </div>
+              ) : (
+                <div style={styles.setupContainer}>
+                  <p style={styles.setupSubtext}>Configure a temporary check-in window. Students must check-in during this time.</p>
+                  
+                  <div style={styles.formGroup}>
+                    <label style={styles.fieldLabel}>Session Duration</label>
+                    <select 
+                      style={styles.selectField}
+                      value={duration} 
+                      onChange={(e) => setDuration(e.target.value)}
+                    >
+                      <option value={2}>2 Minutes</option>
+                      <option value={5}>5 Minutes</option>
+                      <option value={10}>10 Minutes</option>
+                      <option value={15}>15 Minutes</option>
+                    </select>
+                  </div>
+
+                  <div style={styles.checkboxGroup}>
+                    <label style={styles.checkboxLabel}>
+                      <input 
+                        type="checkbox" 
+                        style={styles.checkboxInput}
+                        checked={requireLocation}
+                        onChange={(e) => {
+                          setRequireLocation(e.target.checked);
+                          if (e.target.checked && !userCoords) {
+                            handleGetLocation();
+                          }
+                        }}
+                      />
+                      Require GPS Location Verification
+                    </label>
+                    <p style={styles.checkboxSubtext}>Students must be within 50 meters of your current location to check in successfully.</p>
+                  </div>
+
+                  {requireLocation && (
+                    <div style={styles.locStatusWrapper}>
+                      {locLoading && <div style={styles.locInfoText}>Getting coordinates...</div>}
+                      {locError && <div style={styles.locErrorText}>{locError}</div>}
+                      {userCoords && (
+                        <div style={styles.locSuccessText}>
+                          Coordinates acquired: {userCoords.latitude.toFixed(5)}, {userCoords.longitude.toFixed(5)}
+                        </div>
+                      )}
+                      {!userCoords && !locLoading && !locError && (
+                        <button style={styles.btnLocRetry} onClick={handleGetLocation}>
+                          Acquire Coordinates
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  <button 
+                    style={{
+                      ...styles.btn, 
+                      ...styles.btnAdd, 
+                      width: '100%', 
+                      marginTop: '20px',
+                      opacity: (requireLocation && !userCoords) ? 0.6 : 1,
+                      cursor: (requireLocation && !userCoords) ? 'not-allowed' : 'pointer',
+                      justifyContent: 'center'
+                    }}
+                    disabled={requireLocation && !userCoords}
+                    onClick={handleStartCheckIn}
+                  >
+                    Start Check-in Session
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Back Button */}
         <button
@@ -206,6 +462,29 @@ export default function ViewCroom() {
               </Link>
             )}
 
+            {!alertMsg && (
+              <button
+                style={{
+                  ...styles.btn,
+                  ...styles.btnCheckin,
+                  ...(hoveredButton === 'checkin' ? styles.btnCheckinHover : {}),
+                  ...(checkInActive ? styles.btnCheckinActive : {}),
+                  position: 'relative'
+                }}
+                onClick={() => setCheckInModal(true)}
+                onMouseEnter={() => setHoveredButton('checkin')}
+                onMouseLeave={() => setHoveredButton(null)}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" style={styles.btnIcon} fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  <path d="M9 11l2 2 4-4" />
+                </svg>
+                <span>{checkInActive ? "Check-in Active" : "Self Check-in"}</span>
+                {checkInActive && <span style={styles.pulseBadge}></span>}
+              </button>
+            )}
+
+
             <button
               style={{
                 ...styles.btn,
@@ -245,6 +524,107 @@ export default function ViewCroom() {
             </button>
           </div>
         </div>
+
+        {/* At-Risk Defaulter Banner */}
+        {!alertMsg && room.days > 0 && students.some(st => (st.attendance / room.days) < 0.75) && (
+          <div style={styles.defaulterAlertCard}>
+            <div style={styles.defaulterHeader}>
+              <svg width="24" height="24" viewBox="0 0 24 24" style={styles.defaulterIcon}>
+                <path
+                  fill="#ef4444"
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
+                />
+              </svg>
+              <h4 style={styles.defaulterTitle}>Defaulter Warning (Attendance below 75%)</h4>
+            </div>
+            <p style={styles.defaulterText}>
+              The following students are currently at risk of attendance shortage:
+            </p>
+            <div style={styles.defaulterList}>
+              {students
+                .filter(st => (st.attendance / room.days) < 0.75)
+                .map(st => (
+                  <span key={st._id} style={styles.defaulterNameBadge}>
+                    {st.name} ({(st.attendance / room.days * 100).toFixed(0)}%)
+                  </span>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Analytics Charts Section */}
+        {!alertMsg && room.days > 0 && students.length > 0 && (
+          <div style={styles.analyticsCard}>
+            <div style={styles.tableHeader}>
+              <h3 style={styles.tableTitle}>Classroom Analytics</h3>
+              <div style={styles.analyticsBadge}>Live Insights</div>
+            </div>
+            
+            <div style={styles.chartsGrid}>
+              {/* Daily Trend Chart */}
+              <div style={styles.chartWrapper}>
+                <h4 style={styles.chartTitle}>Daily Attendance Trend (%)</h4>
+                <div style={{ width: '100%', height: 250 }}>
+                  <ResponsiveContainer>
+                    <AreaChart
+                      data={[...attendanceDates].reverse().map(d => ({
+                        date: d.date.substring(5), // MM-DD for compactness
+                        attendance: d.totalCount > 0 ? Math.round((d.presentCount / d.totalCount) * 100) : 0
+                      }))}
+                      margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorAttendance" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#e50914" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#e50914" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="date" stroke="#8c8c8c" fontSize={11} tickLine={false} />
+                      <YAxis stroke="#8c8c8c" fontSize={11} domain={[0, 100]} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ background: '#1f1f1f', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
+                        labelStyle={{ color: '#fff', fontWeight: 600 }}
+                      />
+                      <Area type="monotone" dataKey="attendance" stroke="#e50914" strokeWidth={2} fillOpacity={1} fill="url(#colorAttendance)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Student Distribution Chart */}
+              <div style={styles.chartWrapper}>
+                <h4 style={styles.chartTitle}>Individual Student Attendance (%)</h4>
+                <div style={{ width: '100%', height: 250 }}>
+                  <ResponsiveContainer>
+                    <BarChart
+                      data={students.map(st => ({
+                        name: st.name.split(' ')[0],
+                        percentage: room.days > 0 ? Math.round((st.attendance / room.days) * 100) : 0
+                      }))}
+                      margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                    >
+                      <XAxis dataKey="name" stroke="#8c8c8c" fontSize={10} tickLine={false} />
+                      <YAxis stroke="#8c8c8c" fontSize={11} domain={[0, 100]} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ background: '#1f1f1f', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
+                        labelStyle={{ color: '#fff', fontWeight: 600 }}
+                      />
+                      <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
+                        {students.map((st, index) => {
+                          const pct = room.days > 0 ? (st.attendance / room.days) * 100 : 0;
+                          let fill = '#10b981'; // Green
+                          if (pct < 75) fill = '#ef4444'; // Red
+                          else if (pct < 85) fill = '#f59e0b'; // Yellow
+                          return <Cell key={`cell-${index}`} fill={fill} />;
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Student Table */}
         {alertMsg ? (
@@ -301,17 +681,44 @@ export default function ViewCroom() {
                       </td>
                       <td style={styles.td}>
                         <div style={styles.attendanceWrapper}>
-                          <span style={styles.attendanceText}>
-                            {student.attendance}/{room.days}
-                          </span>
-                          <div style={styles.progressBar}>
-                            <div
-                              style={{
-                                ...styles.progressFill,
-                                width: `${(student.attendance / room.days) * 100}%`,
-                              }}
-                            ></div>
-                          </div>
+                          {(() => {
+                            const percentage = room.days > 0 ? (student.attendance / room.days) * 100 : 0;
+                            let textColor = '#10b981';
+                            let barBackground = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+                            let badgeStyle = styles.badgeGreen;
+
+                            if (percentage < 75) {
+                              textColor = '#ef4444';
+                              barBackground = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+                              badgeStyle = styles.badgeRed;
+                            } else if (percentage < 85) {
+                              textColor = '#f59e0b';
+                              barBackground = 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)';
+                              badgeStyle = styles.badgeYellow;
+                            }
+
+                            return (
+                              <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ ...styles.attendanceText, color: textColor }}>
+                                    {student.attendance}/{room.days}
+                                  </span>
+                                  <span style={badgeStyle}>
+                                    {percentage.toFixed(0)}%
+                                  </span>
+                                </div>
+                                <div style={styles.progressBar}>
+                                  <div
+                                    style={{
+                                      ...styles.progressFill,
+                                      background: barBackground,
+                                      width: `${percentage}%`,
+                                    }}
+                                  ></div>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td style={styles.td}>
@@ -344,6 +751,99 @@ export default function ViewCroom() {
             </div>
           </div>
         )}
+
+        {/* Attendance Logs History Section */}
+        <div style={styles.historyCard}>
+          <div style={styles.tableHeader}>
+            <h3 style={styles.tableTitle}>Attendance History Logs</h3>
+            <div style={styles.historyBadge}>{attendanceDates.length} Days Marked</div>
+          </div>
+          
+          {attendanceDates.length === 0 ? (
+            <div style={styles.noHistoryWrapper}>
+              <svg width="40" height="40" viewBox="0 0 24 24" style={styles.noHistoryIcon}>
+                <path
+                  fill="currentColor"
+                  d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 002 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm-5-8H7v2h7v-2zm-3 4H7v2h4v-2z"
+                />
+              </svg>
+              <p style={styles.noHistoryText}>No attendance sessions recorded yet.</p>
+            </div>
+          ) : (
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Date</th>
+                    <th style={styles.th}>Present / Total Students</th>
+                    <th style={styles.th}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendanceDates.map((dateItem, idx) => (
+                    <tr
+                      key={dateItem.date}
+                      style={{
+                        ...styles.tr,
+                        ...(hoveredRow === `history-${dateItem.date}` ? styles.trHover : {}),
+                        animation: `fadeInUp 0.4s ease-out ${idx * 0.05}s backwards`,
+                      }}
+                      onMouseEnter={() => setHoveredRow(`history-${dateItem.date}`)}
+                      onMouseLeave={() => setHoveredRow(null)}
+                    >
+                      <td style={styles.td}>
+                        <div style={styles.historyDate}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" style={styles.calendarIcon}>
+                            <path
+                              fill="currentColor"
+                              d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 002 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10z"
+                            />
+                          </svg>
+                          <span style={styles.dateText}>{dateItem.date}</span>
+                        </div>
+                      </td>
+                      <td style={styles.td}>
+                        <div style={styles.attendanceWrapper}>
+                          <span style={styles.attendanceText}>
+                            {dateItem.presentCount} / {dateItem.totalCount} present
+                          </span>
+                          <div style={styles.progressBar}>
+                            <div
+                              style={{
+                                ...styles.progressFill,
+                                width: `${(dateItem.presentCount / dateItem.totalCount) * 100}%`,
+                              }}
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={styles.td}>
+                        <Link to={`/markatt/${id}?date=${dateItem.date}`} style={styles.link}>
+                          <button
+                            style={{
+                              ...styles.btnEditHistory,
+                              ...(hoveredButton === `edit-hist-${dateItem.date}` ? styles.btnEditHistoryHover : {}),
+                            }}
+                            onMouseEnter={() => setHoveredButton(`edit-hist-${dateItem.date}`)}
+                            onMouseLeave={() => setHoveredButton(null)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" style={styles.editHistIcon}>
+                              <path
+                                fill="currentColor"
+                                d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+                              />
+                            </svg>
+                            <span>Edit Session</span>
+                          </button>
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
@@ -380,20 +880,205 @@ export default function ViewCroom() {
 }
 
 const styles = {
+  defaulterAlertCard: {
+    background: "rgba(239, 68, 68, 0.05)",
+    border: "1px solid rgba(239, 68, 68, 0.25)",
+    borderRadius: "16px",
+    padding: "24px",
+    marginBottom: "30px",
+    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.3)",
+    animation: "fadeInUp 0.6s ease-out",
+  },
+  defaulterHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    marginBottom: "10px",
+  },
+  defaulterIcon: {
+    flexShrink: 0,
+    animation: "pulse 2s infinite",
+  },
+  defaulterTitle: {
+    fontSize: "18px",
+    fontWeight: "600",
+    color: "#ef4444",
+    margin: 0,
+    letterSpacing: "0.5px",
+  },
+  defaulterText: {
+    fontSize: "14px",
+    color: "#d1d5db",
+    margin: "0 0 16px 0",
+    lineHeight: "1.5",
+  },
+  defaulterList: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "10px",
+  },
+  defaulterNameBadge: {
+    background: "rgba(239, 68, 68, 0.15)",
+    border: "1px solid rgba(239, 68, 68, 0.3)",
+    color: "#ef4444",
+    padding: "6px 12px",
+    borderRadius: "20px",
+    fontSize: "13px",
+    fontWeight: "600",
+    letterSpacing: "0.3px",
+  },
+  analyticsCard: {
+    background: "linear-gradient(145deg, #1f1f1f 0%, #141414 100%)",
+    borderRadius: "20px",
+    padding: "30px",
+    boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5)",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    marginBottom: "30px",
+    animation: "fadeInUp 0.6s ease-out 0.1s backwards",
+  },
+  analyticsBadge: {
+    background: "rgba(229, 9, 20, 0.2)",
+    border: "1px solid rgba(229, 9, 20, 0.3)",
+    padding: "8px 16px",
+    borderRadius: "20px",
+    fontSize: "14px",
+    fontWeight: "600",
+    color: "#e50914",
+    letterSpacing: "0.5px",
+  },
+  chartsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: "30px",
+    marginTop: "20px",
+  },
+  chartWrapper: {
+    background: "rgba(255, 255, 255, 0.02)",
+    border: "1px solid rgba(255, 255, 255, 0.05)",
+    borderRadius: "12px",
+    padding: "20px",
+  },
+  chartTitle: {
+    fontSize: "15px",
+    fontWeight: "600",
+    color: "#e0e0e0",
+    marginBottom: "15px",
+    marginTop: 0,
+    letterSpacing: "0.5px",
+  },
+  badgeRed: {
+    background: "rgba(239, 68, 68, 0.2)",
+    border: "1px solid rgba(239, 68, 68, 0.4)",
+    color: "#ef4444",
+    padding: "3px 8px",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: "700",
+  },
+  badgeYellow: {
+    background: "rgba(245, 158, 11, 0.2)",
+    border: "1px solid rgba(245, 158, 11, 0.4)",
+    color: "#f59e0b",
+    padding: "3px 8px",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: "700",
+  },
+  badgeGreen: {
+    background: "rgba(16, 185, 129, 0.2)",
+    border: "1px solid rgba(16, 185, 129, 0.4)",
+    color: "#10b981",
+    padding: "3px 8px",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: "700",
+  },
+  historyCard: {
+    background: "linear-gradient(145deg, #1f1f1f 0%, #141414 100%)",
+    borderRadius: "20px",
+    padding: "30px",
+    boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5)",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    animation: "fadeInUp 0.6s ease-out 0.3s backwards",
+    marginTop: "40px",
+  },
+  historyBadge: {
+    background: "rgba(59, 130, 246, 0.2)",
+    border: "1px solid rgba(59, 130, 246, 0.3)",
+    padding: "8px 16px",
+    borderRadius: "20px",
+    fontSize: "14px",
+    fontWeight: "600",
+    color: "#3b82f6",
+    letterSpacing: "0.5px",
+  },
+  noHistoryWrapper: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "40px 20px",
+    color: "#8c8c8c",
+  },
+  noHistoryIcon: {
+    marginBottom: "15px",
+    opacity: 0.5,
+  },
+  noHistoryText: {
+    fontSize: "16px",
+    fontWeight: "500",
+    margin: 0,
+  },
+  historyDate: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+  calendarIcon: {
+    color: "#e50914",
+  },
+  dateText: {
+    fontWeight: "600",
+    color: "#fff",
+  },
+  btnEditHistory: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    background: "rgba(245, 158, 11, 0.1)",
+    border: "1px solid rgba(245, 158, 11, 0.3)",
+    padding: "8px 14px",
+    borderRadius: "6px",
+    color: "#f59e0b",
+    fontSize: "13px",
+    fontWeight: "600",
+    cursor: "pointer",
+    transition: "all 0.3s ease",
+    fontFamily: "'Poppins', sans-serif",
+  },
+  btnEditHistoryHover: {
+    background: "rgba(245, 158, 11, 0.2)",
+    transform: "translateY(-1px)",
+    boxShadow: "0 4px 10px rgba(245, 158, 11, 0.15)",
+  },
+  editHistIcon: {
+    flexShrink: 0,
+  },
   pageWrapper: {
     minHeight: "100vh",
-    background: "linear-gradient(to right, #ffffff 0%, #ffffff 15%, #000000 15%, #000000 85%, #ffffff 85%, #ffffff 100%)",
+    background: "linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 50%, #0f0f0f 100%)",
     display: "flex",
     justifyContent: "center",
     alignItems: "flex-start",
     fontFamily: "'Poppins', sans-serif",
+    width: "100%",
   },
 
   container: {
     padding: "40px 20px",
     fontFamily: "'Poppins', sans-serif",
     minHeight: "100vh",
-    background: "#000000",
+    background: "transparent",
     maxWidth: "1400px",
     width: "100%",
     margin: "0 auto",
@@ -405,8 +1090,8 @@ const styles = {
     justifyContent: "center",
     alignItems: "center",
     height: "100vh",
-    background: "#000000",
-    width: "70%",
+    background: "transparent",
+    width: "100%",
   },
 
   loader: {
@@ -628,6 +1313,7 @@ const styles = {
     boxShadow: "0 8px 30px rgba(229, 9, 20, 0.5)",
   },
 
+
   alertCard: {
     background: "linear-gradient(145deg, #1f1f1f 0%, #141414 100%)",
     borderRadius: "20px",
@@ -803,5 +1489,268 @@ const styles = {
   btnTableDeleteHover: {
     background: "rgba(229, 9, 20, 0.2)",
     transform: "scale(1.1)",
+  },
+
+  btnCheckin: {
+    background: "linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)",
+    color: "#fff",
+    boxShadow: "0 4px 20px rgba(6, 182, 212, 0.3)",
+  },
+
+  btnCheckinHover: {
+    transform: "translateY(-2px)",
+    boxShadow: "0 8px 30px rgba(6, 182, 212, 0.5)",
+  },
+
+  btnCheckinActive: {
+    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+    boxShadow: "0 4px 20px rgba(16, 185, 129, 0.3)",
+  },
+
+  pulseBadge: {
+    position: "absolute",
+    top: "6px",
+    right: "6px",
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    backgroundColor: "#ef4444",
+    boxShadow: "0 0 8px #ef4444",
+  },
+
+  modalOverlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backdropFilter: "blur(8px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+    animation: "fadeIn 0.3s ease",
+  },
+
+  modalContent: {
+    background: "linear-gradient(145deg, #222222 0%, #181818 100%)",
+    borderRadius: "20px",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+    padding: "30px",
+    width: "100%",
+    maxWidth: "450px",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.6)",
+    color: "#fff",
+    fontFamily: "'Poppins', sans-serif",
+  },
+
+  modalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "20px",
+    borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+    paddingBottom: "15px",
+  },
+
+  modalTitle: {
+    margin: 0,
+    fontSize: "20px",
+    fontWeight: "600",
+    color: "#fff",
+  },
+
+  modalCloseBtn: {
+    background: "none",
+    border: "none",
+    color: "#8c8c8c",
+    fontSize: "28px",
+    cursor: "pointer",
+    lineHeight: 1,
+    padding: 0,
+    transition: "color 0.2s ease",
+  },
+
+  activeContainer: {
+    textAlign: "center",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "15px",
+  },
+
+  activePulse: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    border: "1px solid rgba(16, 185, 129, 0.2)",
+    padding: "8px 16px",
+    borderRadius: "30px",
+    marginBottom: "10px",
+  },
+
+  pulseInner: {
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    backgroundColor: "#10b981",
+    boxShadow: "0 0 10px #10b981",
+  },
+
+  activeStatusText: {
+    fontSize: "14px",
+    color: "#10b981",
+    fontWeight: "600",
+  },
+
+  activeSubtext: {
+    fontSize: "14px",
+    color: "#a3a3a3",
+    lineHeight: "1.5",
+    margin: "0 0 10px 0",
+  },
+
+  codeWrapper: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    border: "1px solid rgba(255,255,255,0.05)",
+    borderRadius: "12px",
+    padding: "15px 30px",
+    display: "inline-block",
+    marginBottom: "15px",
+  },
+
+  codeLabel: {
+    fontSize: "12px",
+    color: "#8c8c8c",
+    textTransform: "uppercase",
+    letterSpacing: "1px",
+    marginBottom: "5px",
+  },
+
+  codeDisplay: {
+    fontSize: "36px",
+    fontWeight: "700",
+    color: "#06b6d4",
+    letterSpacing: "4px",
+  },
+
+  timerWrapper: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "15px",
+    color: "#e0e0e0",
+  },
+
+  timerLabel: {
+    color: "#8c8c8c",
+  },
+
+  timerValue: {
+    fontWeight: "700",
+    color: "#ef4444",
+    fontFamily: "monospace",
+    fontSize: "18px",
+  },
+
+  setupContainer: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "20px",
+  },
+
+  setupSubtext: {
+    fontSize: "14px",
+    color: "#a3a3a3",
+    lineHeight: "1.5",
+    margin: 0,
+  },
+
+  formGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+
+  fieldLabel: {
+    fontSize: "14px",
+    fontWeight: "500",
+    color: "#d4d4d4",
+  },
+
+  selectField: {
+    backgroundColor: "#2e2e2e",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "8px",
+    padding: "10px 14px",
+    color: "#fff",
+    fontSize: "14px",
+    fontFamily: "'Poppins', sans-serif",
+    outline: "none",
+  },
+
+  checkboxGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+  },
+
+  checkboxLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    fontSize: "14px",
+    color: "#fff",
+    cursor: "pointer",
+    fontWeight: "500",
+  },
+
+  checkboxInput: {
+    cursor: "pointer",
+    accentColor: "#e50914",
+    width: "16px",
+    height: "16px",
+  },
+
+  checkboxSubtext: {
+    margin: 0,
+    fontSize: "12px",
+    color: "#8c8c8c",
+    lineHeight: "1.4",
+    paddingLeft: "26px",
+  },
+
+  locStatusWrapper: {
+    backgroundColor: "rgba(255,255,255,0.02)",
+    border: "1px solid rgba(255,255,255,0.05)",
+    padding: "12px 16px",
+    borderRadius: "8px",
+    fontSize: "13px",
+  },
+
+  locInfoText: {
+    color: "#e0e0e0",
+  },
+
+  locErrorText: {
+    color: "#ef4444",
+    fontWeight: "500",
+  },
+
+  locSuccessText: {
+    color: "#10b981",
+    fontWeight: "500",
+  },
+
+  btnLocRetry: {
+    background: "none",
+    border: "none",
+    color: "#3b82f6",
+    textDecoration: "underline",
+    cursor: "pointer",
+    fontWeight: "600",
+    padding: 0,
   },
 };

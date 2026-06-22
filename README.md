@@ -1,40 +1,47 @@
-# MERN Attendance Application
+# MERN Attendance Management System
 
-This is a full-stack web application built using the MERN stack (MongoDB, Express, React, Node.js) to simplify attendance management. The application allows users to securely log in, create classrooms, add students, and mark attendance digitally.
+A full-stack attendance management application built using the MERN stack (MongoDB, Express, React, Node.js). It simplifies classroom management, automates attendance tracking, and features responsive dashboards, geolocated student check-ins, automated absence notifications, and interactive analytics.
 
 ---
 
-## Features
+## Key Features
 
-- User authentication (Sign up & Login)
-- Classroom creation and management
-- Add and manage students in classrooms
-- Mark attendance for students
+### 📅 Date-Picker Attendance Marking
+- Teachers can select any calendar date using a date-picker interface.
+- View and modify existing attendance records.
+
+### 📊 Live Analytics & Roster Visualizations
+- Interactive, responsive `AreaChart` and `BarChart` visualizers built with **Recharts**.
+- Automatic visual **Defaulter Warnings** and at-risk banners (Attendance < 75%).
+
+### 📄 CSV Bulk Roster Imports
+- Fast classroom enrollment with drag-and-drop CSV parser.
+
+### 🔐 Google OAuth Sign-In & Access Control (RBAC)
+- Secure **Google Sign-In** integration on the Login and Signup portals.
+- Verified JWT session creation using Google account details (email & name).
+- Specialized dashboards for **Teachers** (classroom controls) and **Students** (logs and check-ins).
+- Unique roll number enforcement to prevent duplicate student registration.
+
+### ✉️ Nodemailer Absence Email Alerts
+- Automatic background email alerts sent to students when marked absent, using **Nodemailer** with Ethereal fallback configurations.
+
+### 📍 PIN Geo-Fenced Self Check-In
+- Teachers can initiate check-in sessions generating a temporary 6-digit PIN and capturing GPS coordinates.
+- Students share their location coordinates (utilizing the HTML5 Geolocation API) to verify presence within a **50-meter radius** (Haversine formula validation).
 
 ---
 
 ## Tech Stack
 
-- **MongoDB** – Database for storing users, classrooms, students, and attendance records  
-- **Express.js** – Backend framework for building REST APIs  
-- **React.js** – Frontend library for UI development  
-- **Node.js** – Server-side JavaScript runtime  
+- **MongoDB** – Database for users, classrooms, students, and logs.
+- **Express.js** – REST API framework.
+- **React.js** – Frontend development.
+- **Node.js** – Backend runtime environment.
+- **Libraries used**: Recharts, Nodemailer, React-Toastify, JWT.
 
 ---
 
-## Objective
-
-The objective of this project is to replace manual attendance systems with a simple and efficient web-based solution using modern full-stack technologies.
-
----
-
-## Future Scope
-
-- Attendance history and reports
-- Export attendance data
-- Role-based access control
-
----
-
-**Done by:**  
+**Developed by:**  
 **Boda Likhithraj**
+

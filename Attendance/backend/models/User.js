@@ -19,7 +19,16 @@ const userSchema = new Schema({
         required: [true,'Please Enter Password'],
         minlength:6,
     },    
-    classrooms:[{type:mongoose.Types.ObjectId, ref:"Classroom", required:true}],
+    classrooms:[{type:mongoose.Types.ObjectId, ref:"Classroom"}],
+    role: {
+        type: String,
+        enum: ['Teacher', 'Student'],
+        default: 'Teacher'
+    },
+    roll: {
+        type: Number,
+        required: false
+    }
 })
 
 export default mongoose.model("User", userSchema);
