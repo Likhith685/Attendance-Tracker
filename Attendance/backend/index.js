@@ -725,6 +725,7 @@ app.post("/confirmed/:id", async (req, res) => {
     }
 
     try {
+        const emailPromises = [];
         // Find existing attendance record for this date
         let record = await AttendanceRecord.findOne({ roomid: id, date: targetDate });
 
@@ -753,7 +754,7 @@ app.post("/confirmed/:id", async (req, res) => {
                 } else if (oldStatus === 'Present' && newStatus === 'Absent') {
                     student.attendance = Math.max(0, (student.attendance || 0) - 1);
                     await student.save();
-                    triggerEmailForStudent(student, room.cname, targetDate);
+                    emailPromises.push(triggerEmailForStudent(student, room.cname, targetDate));
                 }
 
                 updatedRecords.push({
@@ -776,7 +777,7 @@ app.post("/confirmed/:id", async (req, res) => {
                 if (status === 'Present') {
                     student.attendance = (student.attendance || 0) + 1;
                 } else {
-                    triggerEmailForStudent(student, room.cname, targetDate);
+                    emailPromises.push(triggerEmailForStudent(student, room.cname, targetDate));
                 }
                 await student.save();
 
@@ -797,6 +798,9 @@ app.post("/confirmed/:id", async (req, res) => {
             await room.save();
         }
         
+        // Wait for all email promises to complete before returning response
+        await Promise.all(emailPromises);
+
         const updatedStudents = await Student.find({ roomid: id }).sort({ roll: 1 });
         return res.status(200).json({ students: updatedStudents });
         
