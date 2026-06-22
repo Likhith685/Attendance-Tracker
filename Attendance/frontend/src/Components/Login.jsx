@@ -3,6 +3,7 @@ import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { GoogleLogin } from '@react-oauth/google';
+import { API_BASE_URL } from '../config';
 
 export default function Login({ trigger, setTrigger, onSuccess, onSignupLinkClick }) {
   const [email, setEmail] = useState('');
@@ -23,7 +24,7 @@ export default function Login({ trigger, setTrigger, onSuccess, onSignupLinkClic
     const token = credentialResponse.credential;
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:5000/login-google', { token });
+      const res = await axios.post(`${API_BASE_URL}/login-google`, { token });
       if (res.status === 200) {
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('role', res.data.role || 'Teacher');
@@ -65,7 +66,7 @@ export default function Login({ trigger, setTrigger, onSuccess, onSignupLinkClic
     }
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:5000/register-google', {
+      const res = await axios.post(`${API_BASE_URL}/register-google`, {
         token: googleToken,
         role: selectedRole,
         roll: selectedRole === 'Student' ? Number(selectedRoll) : undefined
@@ -107,7 +108,7 @@ export default function Login({ trigger, setTrigger, onSuccess, onSignupLinkClic
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:5000/login', { email, password: pwd });
+      const res = await axios.post(`${API_BASE_URL}/login`, { email, password: pwd });
       if (res.status === 200) {
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('role', res.data.role || 'Teacher');

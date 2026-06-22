@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { API_BASE_URL } from '../config';
 
 export default function AddCroom({ trigger, setTrigger, datax }) {
   const [name, setName] = useState('');
@@ -12,7 +13,7 @@ export default function AddCroom({ trigger, setTrigger, datax }) {
     e.preventDefault();
     try {
       setLoading(true);
-      await axios.post("http://localhost:5000/createroom", {
+      await axios.post(`${API_BASE_URL}/createroom`, {
         cname: name,
         ccode: code,
         userid: datax,

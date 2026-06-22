@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { API_BASE_URL } from '../config';
 
 export default function StudentCheckIn() {
   const { roomid } = useParams();
@@ -28,7 +29,7 @@ export default function StudentCheckIn() {
 
     const fetchRoom = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/getroom/${roomid}`);
+        const res = await axios.get(`${API_BASE_URL}/getroom/${roomid}`);
         setRoom(res.data.room);
       } catch (err) {
         console.error(err);
@@ -87,7 +88,7 @@ export default function StudentCheckIn() {
         longitude: coords ? coords.longitude : undefined
       };
 
-      const res = await axios.post(`http://localhost:5000/student/check-in`, payload, {
+      const res = await axios.post(`${API_BASE_URL}/student/check-in`, payload, {
         headers: { token }
       });
 

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
+import { API_BASE_URL } from '../config';
 
 export default function AddStudent({ trigger, setTrigger, roomid, reload, setreload }) {
   const [name, setName] = useState("");
@@ -109,7 +110,7 @@ export default function AddStudent({ trigger, setTrigger, roomid, reload, setrel
     setLoading(true);
 
     try {
-      await axios.post("http://localhost:5000/createstudent", {
+      await axios.post(`${API_BASE_URL}/createstudent`, {
         name,
         roll,
         roomid,
@@ -144,7 +145,7 @@ export default function AddStudent({ trigger, setTrigger, roomid, reload, setrel
     setLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:5000/createstudents-bulk", {
+      const response = await axios.post(`${API_BASE_URL}/createstudents-bulk`, {
         roomid,
         students: parsedStudents
       });

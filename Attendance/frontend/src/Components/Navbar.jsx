@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import AddCroom from "./AddCroom";
 import axios from "axios";
+import { API_BASE_URL } from '../config';
 
 export default function Navbar() {
   const [addRoom, setAddRoom] = useState(false);
@@ -16,7 +17,7 @@ export default function Navbar() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get("http://localhost:5000/user", {
+        const res = await axios.get(`${API_BASE_URL}/user`, {
           headers: { token: localStorage.getItem("token") },
         });
         setUser(res.data);

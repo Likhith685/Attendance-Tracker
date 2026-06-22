@@ -2,6 +2,7 @@ import axios from "axios";
 import React from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { API_BASE_URL } from '../config';
 
 function MarkAtt() {
   const { id } = useParams();
@@ -43,7 +44,7 @@ function MarkAtt() {
   // fetch room details
   React.useEffect(() => {
     axios
-      .get(`http://localhost:5000/getroom/${id}`)
+      .get(`${API_BASE_URL}/getroom/${id}`)
       .then((res) => {
         setdata(res.data.room);
       })
@@ -58,7 +59,7 @@ function MarkAtt() {
   // fetch students list once
   React.useEffect(() => {
     axios
-      .get(`http://localhost:5000/getstudents/${id}`)
+      .get(`${API_BASE_URL}/getstudents/${id}`)
       .then((res) => {
         setstud(res.data.students || []);
       })
@@ -76,7 +77,7 @@ function MarkAtt() {
 
     setload(false);
     axios
-      .get(`http://localhost:5000/attendance/${id}/${selectedDate}`)
+      .get(`${API_BASE_URL}/attendance/${id}/${selectedDate}`)
       .then((res) => {
         const record = res.data.record;
         setIsExistingRecord(true);
@@ -115,7 +116,7 @@ function MarkAtt() {
     setIsSubmitting(true);
     
     try {
-      await axios.post(`http://localhost:5000/confirmed/${id}`, {
+      await axios.post(`${API_BASE_URL}/confirmed/${id}`, {
         binary,
         date: selectedDate
       });

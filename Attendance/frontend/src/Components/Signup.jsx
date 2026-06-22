@@ -3,6 +3,7 @@ import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import { GoogleLogin } from '@react-oauth/google';
+import { API_BASE_URL } from '../config';
 
 export default function Signup({ trigger, setTrigger, onSuccess, onLoginLinkClick }) {
   const [name, setName] = useState("");
@@ -31,7 +32,7 @@ export default function Signup({ trigger, setTrigger, onSuccess, onLoginLinkClic
     setLoading(true);
     try {
       // Check if user already exists
-      const res = await axios.post('http://localhost:5000/login-google', { token });
+      const res = await axios.post(`${API_BASE_URL}/login-google`, { token });
       if (res.status === 200) {
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('role', res.data.role || 'Teacher');
@@ -73,7 +74,7 @@ export default function Signup({ trigger, setTrigger, onSuccess, onLoginLinkClic
     }
     setLoading(true);
     try {
-      const res = await axios.post('http://localhost:5000/register-google', {
+      const res = await axios.post(`${API_BASE_URL}/register-google`, {
         token: googleToken,
         role: selectedRole,
         roll: selectedRole === 'Student' ? Number(selectedRoll) : undefined
@@ -145,7 +146,7 @@ export default function Signup({ trigger, setTrigger, onSuccess, onLoginLinkClic
 
     setLoading(true);
     try {
-      const res = await axios.post("http://localhost:5000/register", { 
+      const res = await axios.post(`${API_BASE_URL}/register`, { 
         name, 
         email, 
         password,

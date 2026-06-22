@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { API_BASE_URL } from '../config';
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ export default function StudentDashboard() {
 
     const fetchDashboard = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/student/dashboard/${roll}`, {
+        const res = await axios.get(`${API_BASE_URL}/student/dashboard/${roll}`, {
           headers: { token }
         });
         setClassrooms(res.data.classrooms || []);

@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import AddStudent from "./AddStudent";
 import EditRoom from "./EditRoom";
+import { API_BASE_URL } from '../config';
 import {
   AreaChart,
   Area,
@@ -76,7 +77,7 @@ export default function ViewCroom() {
   useEffect(() => {
     const fetchRoom = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/getroom/${id}`);
+        const res = await axios.get(`${API_BASE_URL}/getroom/${id}`);
         setRoom(res.data.room);
         
         if (res.data.room.checkInActive) {
@@ -99,7 +100,7 @@ export default function ViewCroom() {
 
     const fetchStudents = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/getstudents/${id}`);
+        const res = await axios.get(`${API_BASE_URL}/getstudents/${id}`);
         setStudents(res.data.students);
         setAlertMsg("");
       } catch (err) {
@@ -111,7 +112,7 @@ export default function ViewCroom() {
 
     const fetchAttendanceDates = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/attendance-dates/${id}`);
+        const res = await axios.get(`${API_BASE_URL}/attendance-dates/${id}`);
         setAttendanceDates(res.data.dates || []);
       } catch (err) {
         console.error(err);
@@ -125,7 +126,7 @@ export default function ViewCroom() {
 
   const handleDeleteStudent = async (studentId) => {
     try {
-      await axios.delete(`http://localhost:5000/delstudent/${studentId}`);
+      await axios.delete(`${API_BASE_URL}/delstudent/${studentId}`);
       setRefresh(!refresh);
     } catch (err) {
       console.error(err);
@@ -135,7 +136,7 @@ export default function ViewCroom() {
   const handleDeleteRoom = async () => {
     if (window.confirm("Are you sure you want to delete this classroom?")) {
       try {
-        await axios.delete(`http://localhost:5000/del/${id}`);
+        await axios.delete(`${API_BASE_URL}/del/${id}`);
         navigate(-1);
       } catch (err) {
         console.error(err);
@@ -181,7 +182,7 @@ export default function ViewCroom() {
         payload.longitude = userCoords.longitude;
       }
       
-      const res = await axios.post(`http://localhost:5000/classroom/${id}/start-checkin`, payload);
+      const res = await axios.post(`${API_BASE_URL}/classroom/${id}/start-checkin`, payload);
       setCheckInActive(true);
       setCheckInCode(res.data.code);
       setCheckInExpiresAt(res.data.expiresAt);
@@ -197,7 +198,7 @@ export default function ViewCroom() {
 
   const handleStopCheckIn = async () => {
     try {
-      await axios.post(`http://localhost:5000/classroom/${id}/stop-checkin`);
+      await axios.post(`${API_BASE_URL}/classroom/${id}/stop-checkin`);
       setCheckInActive(false);
       setCheckInCode("");
       setCheckInExpiresAt(null);

@@ -2,6 +2,7 @@ import React from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
+import { API_BASE_URL } from '../config';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export default function Home() {
     const token = localStorage.getItem("token");
     if (!token) return;
     axios
-      .get("http://localhost:5000/user", {
+      .get(`${API_BASE_URL}/user`, {
         headers: { token },
       })
       .then((res) => {
@@ -42,7 +43,7 @@ export default function Home() {
   React.useEffect(() => {
     if (user) {
       axios
-        .get(`http://localhost:5000/getrooms/${user.userid}`)
+        .get(`${API_BASE_URL}/getrooms/${user.userid}`)
         .then((res) => {
           setRooms(res.data.rooms);
           setLoadingRooms(false);

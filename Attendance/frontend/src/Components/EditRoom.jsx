@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { API_BASE_URL } from '../config';
 
 export default function EditRoom(props) {
   const [cname, setCname] = useState(props.cname);
@@ -14,7 +15,7 @@ export default function EditRoom(props) {
     setLoading(true);
     
     try {
-      await axios.put("http://localhost:5000/editroom", {
+      await axios.put(`${API_BASE_URL}/editroom`, {
         roomid: props.idx,
         cname,
         ccode,
