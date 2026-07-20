@@ -23,8 +23,6 @@ A full-stack attendance management application built using the MERN stack (Mongo
 - Specialized dashboards for **Teachers** (classroom controls) and **Students** (logs and check-ins).
 - Unique roll number enforcement to prevent duplicate student registration.
 
-### ✉️ Nodemailer Absence Email Alerts
-- Automatic background email alerts sent to students when marked absent, using **Nodemailer** with Ethereal fallback configurations.
 
 ### 📍 PIN Geo-Fenced Self Check-In
 - Teachers can initiate check-in sessions generating a temporary 6-digit PIN and capturing GPS coordinates.
